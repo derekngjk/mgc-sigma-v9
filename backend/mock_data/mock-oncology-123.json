@@ -1,0 +1,80 @@
+{
+  "patient": {
+    "resourceType": "Patient",
+    "id": "mock-oncology-123",
+    "name": [
+      {
+        "use": "official",
+        "text": "Elena Vasquez",
+        "family": "Vasquez",
+        "given": ["Elena"]
+      }
+    ],
+    "birthDate": "1968-04-15",
+    "gender": "female"
+  },
+  "conditions": {
+    "resourceType": "Bundle",
+    "type": "searchset",
+    "entry": [
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "code": {
+            "coding": [{ "display": "Invasive ductal carcinoma of left breast, stage III" }],
+            "text": "Invasive ductal carcinoma of left breast, stage III"
+          },
+          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "note": [{ "text": "ER+/PR+, HER2-. Currently receiving neoadjuvant chemotherapy." }]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "code": {
+            "coding": [{ "display": "Chemotherapy-induced nausea and vomiting" }],
+            "text": "Chemotherapy-induced nausea and vomiting"
+          },
+          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "note": [{ "text": "Managed with ondansetron and dexamethasone." }]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "clinicalStatus": { "coding": [{ "code": "resolved" }] },
+          "code": {
+            "coding": [{ "display": "Iron deficiency anaemia" }],
+            "text": "Iron deficiency anaemia"
+          },
+          "category": [{ "coding": [{ "code": "problem-list-item" }] }]
+        }
+      }
+    ]
+  },
+  "care_plans": {
+    "resourceType": "Bundle",
+    "type": "searchset",
+    "entry": [
+      {
+        "resource": {
+          "resourceType": "CarePlan",
+          "status": "active",
+          "title": "Breast Cancer Neoadjuvant Treatment Plan",
+          "description": "12-week neoadjuvant chemotherapy regimen (ddAC-T) prior to surgical evaluation. Weekly nursing check-ins. Imaging reassessment at week 8.",
+          "activity": [
+            { "detail": { "description": "Administer doxorubicin + cyclophosphamide IV q2w x 4 cycles" } },
+            { "detail": { "description": "Transition to paclitaxel IV weekly x 12 weeks after AC completion" } },
+            { "detail": { "description": "Breast MRI reassessment at week 8 to evaluate tumour response" } }
+          ],
+          "goal": [
+            { "display": "Achieve pathological complete response prior to surgery" },
+            { "display": "Maintain quality of life and manage chemotherapy side effects" }
+          ]
+        }
+      }
+    ]
+  }
+}

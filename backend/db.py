@@ -60,7 +60,7 @@ def get_communication(db_path: str, comm_id: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
-_UPDATABLE_FIELDS = {"ai_summary_text", "status", "approved_at"}
+_UPDATABLE_FIELDS = {"ai_summary_text", "status", "approved_at", "target_audience"}
 
 
 def update_communication(db_path: str, comm_id: str, **kwargs: str) -> bool:
