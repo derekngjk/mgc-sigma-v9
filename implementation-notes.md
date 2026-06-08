@@ -167,3 +167,54 @@ This makes the codebase portable between local dev, CI, and Render without any c
 ### No async in business logic
 
 `db.py` and `fhir.py` are fully synchronous. FastAPI supports sync route handlers natively (it runs them in a thread pool). The PoC has no concurrency requirements that would justify async DB or HTTP calls at this stage. Mixing sync and async code in a PoC adds cognitive overhead with no benefit.
+
+---
+
+## Task 4.1 — Clinician Dashboard UI
+
+**Files:** `frontend/src/main.tsx`, `frontend/src/App.tsx`, `frontend/src/pages/ClinicianPage.tsx`
+
+### What was built
+
+A `/clinician` React route that implements the full clinician workflow: patient selection, FHIR data fetch, AI summary generation, inline editing, and an Approve button (wired to `console.log` placeholder; real endpoint in Task 4.2). Routing was added to `main.tsx` (`BrowserRouter`) and `App.tsx` (`Routes`). The welcome screen at `/` was preserved and gained a "Open Clinician View →" link.
+
+### Design research and rationale
+
+UI design decisions were grounded in three reference points:
+
+**1. Epic Hyperspace embedded app conventions** — Epic's Hyperspace uses a dark-navy top chrome (`bg-slate-800`), with content panels on neutral backgrounds. The top bar and PHI warning banner replicate this pattern to make the PoC feel contextually embedded rather than like a generic web app. Source: [Embed AI Inside Epic via SMART on FHIR (Taction)](https://www.tactionsoft.com/blog/embed-ai-inside-epic-smart-on-fhir/), [Healthcare UX Done Right: Epic Systems (Medium)](https://medium.com/@blessingokpala/healthcare-ux-done-right-epic-systems-and-the-future-of-patient-centered-design-b943966a63f7).
+
+**2. Nabla Copilot / ambient AI scribe layout** — Nabla and Abridge both use a side-by-side layout where source data (transcript or chart) sits left, and the AI-generated draft sits right. The clinician edits the draft in place before finalising. This directly maps to our two-column grid: raw FHIR data left, editable textarea right. Source: [Nabla: AI Copilot for Clinicians](https://www.nabla.com/).
+
+**3. JAMIA study on AI-drafted patient portal messages** — Research on real clinician usage found that reviewing AI drafts adds ~135% time overhead per message compared to writing from scratch. The design implication: minimise clicks between "see draft" and "approve". The layout puts Generate and Approve as the only two actions in the right panel, with no modals or confirmation dialogs in the way. Source: [Utilization of Generative AI-drafted Responses — npj Digital Medicine](https://www.nature.com/articles/s41746-025-01972-w).
+
+### Lo-fi wireframe
+
+```txt
+┌──────────────────────────────────────────────────────────────────────────┐
+│ ■ Sigma Tech v9  /  Clinician View          ⚠ PoC · Synthetic Data Only │
+├──────────────────────────────────────────────────────────────────────────┤
+│  Patient  [mock-oncology-123 — Elena Vasquez (Mock Oncology)  ▾]         │
+│           [Fetch Patient Data ▶]                                         │
+├─────────────────────────────┬────────────────────────────────────────────┤
+│ CLINICAL DATA               │ AI DRAFT                                   │
+│ Elena Vasquez, 57 F         │  Audience  [Family ▾]   [Generate ▶]      │
+│ Active Conditions           │  ┌──────────────────────────────────────┐  │
+│  • Invasive ductal          │  │ Think of cancer cells like weeds...  │  │
+│    carcinoma, stage III     │  │ (editable textarea)                  │  │
+│  • Chemo-induced nausea     │  └──────────────────────────────────────┘  │
+│ Care Plan                   │         [✓ Approve & Generate Link]       │
+└─────────────────────────────┴────────────────────────────────────────────┘
+```
+
+### Component structure decisions
+
+**Single-file page component:** All sub-components (`Spinner`, `ErrorBanner`, `ClinicalDataPanel`, `AiDraftPanel`) are defined in `ClinicianPage.tsx` as non-exported helpers. At PoC scale with one page, splitting into separate files would add indirection without benefit.
+
+**`Stage` enum drives all conditional rendering:** A single `type Stage = 'idle' | 'fetching' | 'ready' | 'generating' | 'generated'` string union controls which UI elements are enabled or visible. This makes the state machine explicit and ensures buttons can never be in an inconsistent enabled/disabled state.
+
+**`fetchError` shown in the selector bar, not the draft panel:** When a fetch fails (e.g. sandbox unreachable → 502), the error appears inline next to the Fetch button, not inside the two-column layout that hasn't rendered yet. This avoids a layout jump where an empty panel appears just to show an error.
+
+**Approve button fires `console.log` placeholder:** The full approval flow (Task 4.2) requires a `POST /api/communications/{id}/approve` endpoint that doesn't exist yet. The button is present and visually correct (`emerald-600`, enabled only when a generated summary exists) so Task 4.2 is a one-line change — swap the `console.log` for an `await fetch(...)`.
+
+**Color palette: all Tailwind defaults, no custom config:** The dark top bar (`slate-800`), neutral backgrounds (`slate-50`/`slate-100`), indigo action buttons, emerald approve button, and amber warning banner are all from Tailwind's default palette. No theme extensions were needed, keeping `tailwind.config.js` unchanged.

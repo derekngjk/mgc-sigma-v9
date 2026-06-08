@@ -16,6 +16,10 @@ mgc-sigma-v9/
 │   ├── mock_data/          Static FHIR fixtures (bypasses live sandbox)
 │   └── tests/              pytest suite (54 tests across tasks 1.1, 1.2, 2.1, 3.1)
 └── frontend/   React + Vite + TS + Tailwind — Clinician + Family views
+    └── src/
+        ├── App.tsx             Root component — BrowserRouter routes (/ and /clinician)
+        └── pages/
+            └── ClinicianPage.tsx   Clinician dashboard — patient selector, FHIR panel, AI draft, Approve
 ```
 
 ## Local dev
@@ -43,7 +47,7 @@ cp .env.example .env               # set VITE_API_BASE_URL=http://localhost:8000
 npm run dev
 ```
 
-Open: <http://localhost:5173>
+Open: <http://localhost:5173> (welcome screen) or <http://localhost:5173/clinician> (clinician view)
 
 ### Running tests
 
@@ -68,6 +72,6 @@ or `OPENAI_API_KEY`) as env vars on the Render dashboard.
 | 2.1 | FHIR Sandbox Fetcher — `GET /api/patient/{id}` | ✅ Done |
 | 2.2 | Mock data fallback — `mock-oncology-123` fixture | ✅ Done |
 | 3.1 | LLM translation — `POST /api/generate` | ✅ Done |
-| 4.1 | Clinician dashboard UI (`/clinician`) | ⏳ Pending |
+| 4.1 | Clinician dashboard UI (`/clinician`) | ✅ Done |
 | 4.2 | Approval + magic link flow | ⏳ Pending |
 | 4.3 | Patient/family mobile viewer (`/family/:id`) | ⏳ Pending |

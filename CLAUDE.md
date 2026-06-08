@@ -44,9 +44,12 @@ mgc-sigma-v9/
 │
 ├── frontend/                   React 18 + Vite + TypeScript + Tailwind CSS
 │   ├── src/
-│   │   ├── main.tsx            React entry point, router bootstrap
-│   │   ├── App.tsx             Root component (welcome screen / health check)
-│   │   └── index.css           Tailwind base import
+│   │   ├── main.tsx            React entry point — BrowserRouter + StrictMode wrapper
+│   │   ├── App.tsx             Routes: / → WelcomeScreen, /clinician → ClinicianPage
+│   │   ├── index.css           Tailwind base import
+│   │   └── pages/
+│   │       └── ClinicianPage.tsx   Full clinician workflow — patient selector, FHIR data panel,
+│   │                               AI draft panel (editable textarea), Approve button
 │   ├── index.html
 │   ├── vite.config.ts
 │   ├── tailwind.config.js
@@ -55,12 +58,13 @@ mgc-sigma-v9/
 └── render.yaml                 Render PaaS deployment (one web service + one static site)
 ```
 
-### Frontend route namespaces (planned)
+### Frontend routes
 
-| Route | Purpose |
-| --- | --- |
-| `/clinician` | Mock EHR tab — patient selector, side-by-side Raw FHIR vs. AI Draft, Approve button |
-| `/family/:id` | Mobile-first patient/family viewer — fetches approved summary by UUID; 404 on unknown ID |
+| Route | Status | Purpose |
+| --- | --- | --- |
+| `/` | ✅ Live | Welcome screen — backend health check, link to `/clinician` |
+| `/clinician` | ✅ Live | EHR-embedded tab — patient selector, side-by-side Raw FHIR vs. AI Draft, Approve button |
+| `/family/:id` | ⏳ Pending | Mobile-first patient/family viewer — fetches approved summary by UUID; 404 on unknown ID |
 
 ### Backend API surface
 
