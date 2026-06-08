@@ -1,8 +1,21 @@
 import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="MGC PoC API", version="0.1.0")
+from db import init_db
+
+DB_PATH = os.getenv("DB_PATH", "mgc.db")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db(DB_PATH)
+    yield
+
+
+app = FastAPI(title="MGC PoC API", version="0.1.0", lifespan=lifespan)
 
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 app.add_middleware(
