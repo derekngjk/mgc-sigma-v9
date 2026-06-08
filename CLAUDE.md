@@ -23,23 +23,34 @@ There are no shared packages between the two services. The backend is the single
 
 ```text
 mgc-sigma-v9/
-├── backend/            FastAPI service (Python 3.11)
-│   ├── main.py         All routes, CORS config, and app bootstrap (single file for now)
-│   ├── requirements.txt
-│   ├── runtime.txt     Pins Python version for Render
-│   └── .env.example    FRONTEND_ORIGIN
+├── backend/                    FastAPI service (Python 3.11)
+│   ├── main.py                 Routes, CORS config, Pydantic response models, app bootstrap
+│   ├── db.py                   SQLite CRUD — init_db, create_communication, get_communication, update_communication
+│   ├── fhir.py                 FHIR fetch + parse — fetch_patient_data, _fetch_from_sandbox, _parse_fhir_bundle
+│   ├── mock_data/
+│   │   └── mock-oncology-123.json   Synthetic oncology fixture (bypasses Epic Sandbox)
+│   ├── requirements.txt        Production deps (fastapi, uvicorn, pydantic, httpx, python-dotenv)
+│   ├── requirements-dev.txt    Test deps (-r requirements.txt + pytest)
+│   ├── pytest.ini              testpaths = tests, pythonpath = .
+│   ├── runtime.txt             Pins Python version for Render
+│   ├── .env.example            FRONTEND_ORIGIN · DB_PATH · FHIR_BASE_URL
+│   └── tests/
+│       ├── conftest.py         Shared TestClient fixture
+│       ├── test_task_1_1.py    Health check + root endpoint (4 tests)
+│       ├── test_task_1_2.py    SQLite CRUD (14 tests)
+│       └── test_task_2_1.py    FHIR fetcher + mock fallback (22 tests)
 │
-├── frontend/           React 18 + Vite + TypeScript + Tailwind CSS
+├── frontend/                   React 18 + Vite + TypeScript + Tailwind CSS
 │   ├── src/
-│   │   ├── main.tsx    React entry point, router bootstrap
-│   │   ├── App.tsx     Root component (currently the welcome screen / health check)
-│   │   └── index.css   Tailwind base import
+│   │   ├── main.tsx            React entry point, router bootstrap
+│   │   ├── App.tsx             Root component (welcome screen / health check)
+│   │   └── index.css           Tailwind base import
 │   ├── index.html
 │   ├── vite.config.ts
 │   ├── tailwind.config.js
-│   └── .env.example    VITE_API_BASE_URL
+│   └── .env.example            VITE_API_BASE_URL
 │
-└── render.yaml         Render PaaS deployment (one web service + one static site)
+└── render.yaml                 Render PaaS deployment (one web service + one static site)
 ```
 
 ### Frontend route namespaces (planned)
@@ -49,15 +60,15 @@ mgc-sigma-v9/
 | `/clinician` | Mock EHR tab — patient selector, side-by-side Raw FHIR vs. AI Draft, Approve button |
 | `/family/:id` | Mobile-first patient/family viewer — fetches approved summary by UUID; 404 on unknown ID |
 
-### Backend API surface (planned)
+### Backend API surface
 
-| Endpoint | Description |
-| --- | --- |
-| `GET /health` | Liveness check |
-| `GET /api/patient/{id}` | Fetch + parse FHIR data from Epic Sandbox; falls back to mock JSON |
-| `POST /api/generate` | Send clinical text + audience to LLM; return simplified summary |
-| `POST /api/communications/{id}/approve` | Save approved text to SQLite, flip status to Approved |
-| `GET /api/communications/{id}` | Return approved summary for the family viewer |
+| Endpoint | Status | Description |
+| --- | --- | --- |
+| `GET /health` | ✅ Live | Liveness check |
+| `GET /api/patient/{id}` | ✅ Live | Fetch + parse FHIR data (Patient, Condition, CarePlan); falls back to mock JSON for `mock-oncology-123`; creates a Draft `Communications` record; returns `PatientResponse` |
+| `POST /api/generate` | 🔜 Next | Send clinical text + audience to LLM; return simplified summary |
+| `POST /api/communications/{id}/approve` | ⏳ Pending | Save approved text to SQLite, flip status to Approved |
+| `GET /api/communications/{id}` | ⏳ Pending | Return approved summary for the family viewer |
 
 ### SQLite schema (`Communications` table)
 
@@ -145,11 +156,11 @@ LLM calls are synchronous. If response time exceeds ~5 seconds, use the LLM prov
   cd frontend && npm run test -- path/to/file.test.tsx   # run a single file
   ```
 
-- **Backend:** pytest is the test runner.
+- **Backend:** pytest is the test runner. Always use the venv's pytest binary.
 
   ```bash
-  cd backend && pytest                 # run all tests
-  cd backend && pytest tests/test_foo.py   # run a single file
+  cd backend && .venv/bin/pytest -v                          # run all tests
+  cd backend && .venv/bin/pytest tests/test_task_2_1.py -v   # run a single file
   ```
 
 - New features require at least one unit test covering the happy path and one covering the primary error/edge case.
