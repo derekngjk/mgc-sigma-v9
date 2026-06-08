@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { Route, Routes } from 'react-router-dom';
+import ClinicianPage from './pages/ClinicianPage';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 type Health = { status: string; service: string; version: string };
 
-export default function App() {
+function WelcomeScreen() {
   const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,7 +55,25 @@ export default function App() {
             <div className="mt-2 text-sm text-slate-500">checking…</div>
           )}
         </div>
+
+        <div className="mt-6">
+          <a
+            href="/clinician"
+            className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            Open Clinician View →
+          </a>
+        </div>
       </div>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<WelcomeScreen />} />
+      <Route path="/clinician" element={<ClinicianPage />} />
+    </Routes>
   );
 }
