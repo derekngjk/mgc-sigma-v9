@@ -27,18 +27,20 @@ mgc-sigma-v9/
 │   ├── main.py                 Routes, CORS config, Pydantic response models, app bootstrap
 │   ├── db.py                   SQLite CRUD — init_db, create_communication, get_communication, update_communication
 │   ├── fhir.py                 FHIR fetch + parse — fetch_patient_data, _fetch_from_sandbox, _parse_fhir_bundle
+│   ├── llm.py                  LLM translation — generate_summary, _call_llm (Anthropic + OpenAI)
 │   ├── mock_data/
 │   │   └── mock-oncology-123.json   Synthetic oncology fixture (bypasses Epic Sandbox)
-│   ├── requirements.txt        Production deps (fastapi, uvicorn, pydantic, httpx, python-dotenv)
+│   ├── requirements.txt        Production deps (fastapi, uvicorn, pydantic, httpx, python-dotenv, anthropic, openai)
 │   ├── requirements-dev.txt    Test deps (-r requirements.txt + pytest)
 │   ├── pytest.ini              testpaths = tests, pythonpath = .
 │   ├── runtime.txt             Pins Python version for Render
-│   ├── .env.example            FRONTEND_ORIGIN · DB_PATH · FHIR_BASE_URL
+│   ├── .env.example            FRONTEND_ORIGIN · DB_PATH · FHIR_BASE_URL · LLM_PROVIDER · ANTHROPIC_API_KEY · OPENAI_API_KEY
 │   └── tests/
 │       ├── conftest.py         Shared TestClient fixture
 │       ├── test_task_1_1.py    Health check + root endpoint (4 tests)
 │       ├── test_task_1_2.py    SQLite CRUD (14 tests)
-│       └── test_task_2_1.py    FHIR fetcher + mock fallback (22 tests)
+│       ├── test_task_2_1.py    FHIR fetcher + mock fallback (22 tests)
+│       └── test_task_3_1.py    LLM translation — happy path, audience, errors, unit (14 tests)
 │
 ├── frontend/                   React 18 + Vite + TypeScript + Tailwind CSS
 │   ├── src/
@@ -66,7 +68,7 @@ mgc-sigma-v9/
 | --- | --- | --- |
 | `GET /health` | ✅ Live | Liveness check |
 | `GET /api/patient/{id}` | ✅ Live | Fetch + parse FHIR data (Patient, Condition, CarePlan); falls back to mock JSON for `mock-oncology-123`; creates a Draft `Communications` record; returns `PatientResponse` |
-| `POST /api/generate` | 🔜 Next | Send clinical text + audience to LLM; return simplified summary |
+| `POST /api/generate` | ✅ Live | Accepts `comm_id` + `target_audience`; calls LLM (`LLM_PROVIDER` env var selects Anthropic or OpenAI); stores summary in `Communications`; returns `GenerateResponse` |
 | `POST /api/communications/{id}/approve` | ⏳ Pending | Save approved text to SQLite, flip status to Approved |
 | `GET /api/communications/{id}` | ⏳ Pending | Return approved summary for the family viewer |
 
@@ -160,7 +162,7 @@ LLM calls are synchronous. If response time exceeds ~5 seconds, use the LLM prov
 
   ```bash
   cd backend && .venv/bin/pytest -v                          # run all tests
-  cd backend && .venv/bin/pytest tests/test_task_2_1.py -v   # run a single file
+  cd backend && .venv/bin/pytest tests/test_task_3_1.py -v   # run a single file
   ```
 
 - New features require at least one unit test covering the happy path and one covering the primary error/edge case.

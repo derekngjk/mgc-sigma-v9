@@ -12,8 +12,9 @@ mgc-sigma-v9/
 │   ├── main.py             Routes + Pydantic models
 │   ├── db.py               SQLite CRUD layer
 │   ├── fhir.py             Epic FHIR R4 fetcher + parser
+│   ├── llm.py              LLM translation — Anthropic + OpenAI, env-var selected
 │   ├── mock_data/          Static FHIR fixtures (bypasses live sandbox)
-│   └── tests/              pytest suite (40 tests across tasks 1.1, 1.2, 2.1)
+│   └── tests/              pytest suite (54 tests across tasks 1.1, 1.2, 2.1, 3.1)
 └── frontend/   React + Vite + TS + Tailwind — Clinician + Family views
 ```
 
@@ -26,7 +27,7 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
-cp .env.example .env               # set FRONTEND_ORIGIN, DB_PATH, FHIR_BASE_URL
+cp .env.example .env               # set FRONTEND_ORIGIN, DB_PATH, FHIR_BASE_URL, ANTHROPIC_API_KEY / OPENAI_API_KEY
 uvicorn main:app --reload --port 8000
 ```
 
@@ -49,13 +50,14 @@ Open: <http://localhost:5173>
 ```bash
 cd backend
 .venv/bin/pytest -v                              # full suite
-.venv/bin/pytest tests/test_task_2_1.py -v      # single file
+.venv/bin/pytest tests/test_task_3_1.py -v      # single file
 ```
 
 ## Deploy
 
 `render.yaml` defines two Render services (web app + API). Set `FRONTEND_ORIGIN`,
-`DB_PATH`, and `FHIR_BASE_URL` as env vars on the Render dashboard.
+`DB_PATH`, `FHIR_BASE_URL`, `LLM_PROVIDER`, and the relevant API key (`ANTHROPIC_API_KEY`
+or `OPENAI_API_KEY`) as env vars on the Render dashboard.
 
 ## Status
 
@@ -65,7 +67,7 @@ cd backend
 | 1.2 | SQLite state store — `Communications` table + CRUD | ✅ Done |
 | 2.1 | FHIR Sandbox Fetcher — `GET /api/patient/{id}` | ✅ Done |
 | 2.2 | Mock data fallback — `mock-oncology-123` fixture | ✅ Done |
-| 3.1 | LLM translation — `POST /api/generate` | 🔜 Next |
+| 3.1 | LLM translation — `POST /api/generate` | ✅ Done |
 | 4.1 | Clinician dashboard UI (`/clinician`) | ⏳ Pending |
 | 4.2 | Approval + magic link flow | ⏳ Pending |
 | 4.3 | Patient/family mobile viewer (`/family/:id`) | ⏳ Pending |

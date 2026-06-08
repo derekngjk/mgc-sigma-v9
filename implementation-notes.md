@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD024 -->
 # MGC PoC — Implementation Notes
 
 This document records the actual technical decisions made during implementation, the reasoning behind each, and where they diverged from the original architecture plan. It is a living record — updated as each task completes.
@@ -106,6 +107,44 @@ The original spec listed `Patient.Read` and `Condition.Read`. `CarePlan.Read` wa
 **`monkeypatch.setattr("fhir._fetch_from_sandbox", ...)` instead of `respx`:** The sandbox tests patch `_fetch_from_sandbox` directly rather than intercepting HTTP at the transport layer. This avoids adding `respx` as a dependency and keeps the mock surface minimal — exactly one function is replaced, leaving all other logic (parsing, DB writes, response serialisation) exercised for real. `respx` would be worth adding if we needed to test redirect handling, streaming, or header inspection, but none of those apply here.
 
 **Function-scoped isolated DB in Task 2.1 tests:** Unlike the module-scoped `TestClient` in `conftest.py` (used by Task 1.1 health tests), Task 2.1 tests use a function-scoped `client` fixture that patches `main.DB_PATH` to a `tmp_path`-isolated DB. Each test gets a clean database, preventing state leakage between tests that write `Communications` records. The Task 1.1 tests don't write to the DB so module scope is appropriate there; the Task 2.1 tests do, so function scope is required.
+
+---
+
+## Task 3.1 — LLM Translation
+
+**Files:** `backend/llm.py`, `backend/main.py`, `backend/tests/test_task_3_1.py`
+
+### What was built
+
+A `llm.py` module with two functions (`generate_summary`, `_call_llm`) that translate a stored FHIR clinical JSON payload into a patient/family-friendly summary via an LLM. `main.py` exposes this as `POST /api/generate`, which fetches the existing `Communications` record, calls the LLM, stores the result, and returns it. Both Anthropic and OpenAI are supported; `LLM_PROVIDER` env var selects at runtime.
+
+### Provider decisions
+
+**Dual-provider via env var (`LLM_PROVIDER`):** Rather than picking one provider, a `LLM_PROVIDER=anthropic|openai` env var selects the active SDK. This lets the same codebase work with whichever key is available in a given environment — useful during development when one key may not be available, and during demos where the operator may have a preference.
+
+**Lazy SDK imports inside `_call_llm`:** Both `anthropic` and `openai` are in `requirements.txt`, but neither is imported at module top level. The import happens inside `_call_llm` only when that provider is active. This avoids import errors in environments where only one API key is set, and prevents both SDKs from initialising when only one is needed.
+
+**`LLMConfigError` (503) vs `LLMError` (502):** Two exception classes mirror the `fhir.py` pattern. `LLMConfigError` indicates a misconfigured environment (missing API key, unknown provider) — a 503 tells the caller the service isn't ready, distinct from a 502 which indicates the upstream LLM API itself failed. Callers can handle these differently: a 503 means fix the deployment config; a 502 means retry or surface a fallback.
+
+### Module structure decisions
+
+**`llm.py` separated from `main.py`:** All LLM logic — prompt construction, provider dispatch, exceptions — lives in `llm.py`. `main.py` only handles request/response wiring and error mapping. This mirrors the `fhir.py` separation established in Tasks 2.1/2.2.
+
+**Single public entry point (`generate_summary`):** `main.py` imports only `generate_summary` and the two exception classes. `_call_llm` is private (prefixed `_`) and imported directly only in tests — the same pattern used for `_fetch_from_sandbox` in `fhir.py`.
+
+**Prompt contains both raw text and audience inline:** The full prompt is constructed in `generate_summary` and passed as a single string to `_call_llm`. This keeps `_call_llm` provider-agnostic — it receives only a string and returns a string, with no knowledge of the prompt's structure. This makes it straightforward to swap provider implementations without changing prompt logic.
+
+### DB decisions
+
+**`target_audience` added to `_UPDATABLE_FIELDS`:** The initial FHIR fetch creates a record with `target_audience="family"` as a default. When `/api/generate` is called with a different audience (e.g. `"patient"`), the record is updated to reflect the audience that was actually used to generate the summary. Without this update, the stored record would not accurately represent the prompt that produced the `ai_summary_text`.
+
+### Testing decisions
+
+**`seeded_comm_id` fixture creates a real DB record:** Rather than posting to `/api/patient/...` first, the generate tests seed a `Communications` record directly via `db.create_communication`. This keeps each test focused on the generate path, avoids dependencies on the FHIR module, and is faster (no route call overhead).
+
+**`_call_llm` monkeypatched, not the SDK:** Tests patch `llm._call_llm` directly rather than mocking Anthropic or OpenAI HTTP transport. This avoids adding a transport-mocking library and keeps the mock surface minimal — only the final SDK call is replaced. All prompt construction and exception mapping is exercised for real.
+
+**Group D tests capture the prompt string:** `test_generate_summary_passes_raw_text_in_prompt` and `test_generate_summary_passes_audience_in_prompt` use a capturing lambda that appends the prompt to a list before returning the mock summary. This verifies that `generate_summary` correctly embeds both inputs into the prompt without inspecting implementation internals beyond what the function contract requires.
 
 ---
 
