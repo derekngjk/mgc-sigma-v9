@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="1200" height="700" font-family="Arial, Helvetica, sans-serif">
+
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#475569"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#b45309"/>
+    </marker>
+    <!-- Clip paths keep header fills inside rounded container corners -->
+    <clipPath id="clip-fe">
+      <rect x="52" y="168" width="240" height="308" rx="8"/>
+    </clipPath>
+    <clipPath id="clip-be">
+      <rect x="388" y="168" width="265" height="308" rx="8"/>
+    </clipPath>
+    <clipPath id="clip-db">
+      <rect x="408" y="510" width="228" height="112" rx="8"/>
+    </clipPath>
+  </defs>
+
+  <!-- ── Background ───────────────────────────────────────────── -->
+  <rect width="1200" height="700" fill="#f1f5f9"/>
+
+  <!-- ── PERSONS ───────────────────────────────────────────────── -->
+
+  <!-- Clinician -->
+  <rect x="42" y="16" width="178" height="88" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="131" y="34"  text-anchor="middle" font-size="9"  fill="#92400e" font-style="italic">«Person»</text>
+  <text x="131" y="52"  text-anchor="middle" font-size="14" fill="#78350f" font-weight="bold">Clinician</text>
+  <text x="131" y="68"  text-anchor="middle" font-size="9"  fill="#92400e">Reviews AI draft,</text>
+  <text x="131" y="82"  text-anchor="middle" font-size="9"  fill="#92400e">approves and generates magic link</text>
+
+  <!-- Patient / Family -->
+  <rect x="980" y="16" width="178" height="88" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="1069" y="34"  text-anchor="middle" font-size="9"  fill="#92400e" font-style="italic">«Person»</text>
+  <text x="1069" y="52"  text-anchor="middle" font-size="14" fill="#78350f" font-weight="bold">Patient / Family</text>
+  <text x="1069" y="68"  text-anchor="middle" font-size="9"  fill="#92400e">Opens magic link,</text>
+  <text x="1069" y="82"  text-anchor="middle" font-size="9"  fill="#92400e">reads approved summary</text>
+
+  <!-- ── SYSTEM BOUNDARY ───────────────────────────────────────── -->
+  <rect x="28" y="130" width="1144" height="528" rx="8" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="8,4"/>
+  <text x="44" y="148" font-size="10" fill="#94a3b8" font-style="italic">MGC PoC · System Boundary · Deployed on Render PaaS</text>
+
+  <!-- ── FRONTEND CONTAINER ────────────────────────────────────── -->
+  <rect x="52" y="168" width="240" height="308" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+  <!-- Blue header band -->
+  <rect x="52" y="168" width="240" height="40" fill="#2563eb" clip-path="url(#clip-fe)"/>
+  <text x="172" y="184" text-anchor="middle" font-size="9"  fill="#bfdbfe" font-style="italic">«Container»</text>
+  <text x="172" y="200" text-anchor="middle" font-size="13" fill="white"   font-weight="bold">Frontend</text>
+  <!-- Sub-label below header -->
+  <text x="172" y="221" text-anchor="middle" font-size="9"  fill="#1d4ed8">[React 18 · Vite · TypeScript · Tailwind CSS]</text>
+
+  <!-- /clinician route card -->
+  <rect x="67" y="232" width="210" height="94" rx="5" fill="white" stroke="#bfdbfe" stroke-width="1.5"/>
+  <text x="172" y="249" text-anchor="middle" font-size="10" fill="#1e40af" font-weight="bold">/clinician</text>
+  <text x="172" y="265" text-anchor="middle" font-size="9"  fill="#374151">Patient selector dropdown</text>
+  <text x="172" y="279" text-anchor="middle" font-size="9"  fill="#374151">Raw FHIR ↔ AI draft side-by-side</text>
+  <text x="172" y="293" text-anchor="middle" font-size="9"  fill="#374151">Edit → Approve → magic link modal</text>
+  <text x="172" y="307" text-anchor="middle" font-size="9"  fill="#374151">Skeleton loader during LLM call</text>
+
+  <!-- /family/:id route card -->
+  <rect x="67" y="338" width="210" height="80" rx="5" fill="white" stroke="#bfdbfe" stroke-width="1.5"/>
+  <text x="172" y="355" text-anchor="middle" font-size="10" fill="#1e40af" font-weight="bold">/family/:id</text>
+  <text x="172" y="371" text-anchor="middle" font-size="9"  fill="#374151">Mobile-first summary viewer</text>
+  <text x="172" y="385" text-anchor="middle" font-size="9"  fill="#374151">Fetches record by UUID token</text>
+  <text x="172" y="399" text-anchor="middle" font-size="9"  fill="#dc2626">404 on unknown token</text>
+
+  <!-- Frontend footnotes -->
+  <text x="172" y="432" text-anchor="middle" font-size="9" fill="#64748b">VITE_API_BASE_URL → backend</text>
+  <text x="172" y="446" text-anchor="middle" font-size="9" fill="#64748b">npm run dev → localhost:5173</text>
+  <text x="172" y="460" text-anchor="middle" font-size="9" fill="#64748b">Deployed: Render static site (dist/)</text>
+
+  <!-- ── BACKEND CONTAINER ─────────────────────────────────────── -->
+  <rect x="388" y="168" width="265" height="308" rx="8" fill="#1e3a8a" stroke="#3b82f6" stroke-width="2"/>
+  <!-- Darker header band -->
+  <rect x="388" y="168" width="265" height="40" fill="#1e40af" clip-path="url(#clip-be)"/>
+  <text x="520" y="184" text-anchor="middle" font-size="9"  fill="#93c5fd" font-style="italic">«Container»</text>
+  <text x="520" y="200" text-anchor="middle" font-size="13" fill="white"   font-weight="bold">API Service</text>
+  <text x="520" y="221" text-anchor="middle" font-size="9"  fill="#93c5fd">[Python · FastAPI · uvicorn]</text>
+
+  <!-- FHIR Fetcher sub-box -->
+  <rect x="403" y="234" width="235" height="64" rx="4" fill="#1e40af"/>
+  <text x="520" y="252" text-anchor="middle" font-size="10" fill="white"   font-weight="bold">FHIR Fetcher</text>
+  <text x="520" y="268" text-anchor="middle" font-size="9"  fill="#93c5fd">GET Patient · Condition · CarePlan</text>
+  <text x="520" y="283" text-anchor="middle" font-size="9"  fill="#93c5fd">Fallback: mock-oncology-123 → static JSON</text>
+
+  <!-- LLM Client sub-box -->
+  <rect x="403" y="308" width="235" height="60" rx="4" fill="#1e40af"/>
+  <text x="520" y="326" text-anchor="middle" font-size="10" fill="white"   font-weight="bold">LLM Client</text>
+  <text x="520" y="342" text-anchor="middle" font-size="9"  fill="#93c5fd">POST /api/generate → AI summary</text>
+  <text x="520" y="357" text-anchor="middle" font-size="9"  fill="#93c5fd">target_audience: patient | family</text>
+
+  <!-- Communications Handler sub-box -->
+  <rect x="403" y="378" width="235" height="60" rx="4" fill="#1e40af"/>
+  <text x="520" y="396" text-anchor="middle" font-size="10" fill="white"   font-weight="bold">Communications Handler</text>
+  <text x="520" y="412" text-anchor="middle" font-size="9"  fill="#93c5fd">Draft → Approved · auto-sets approved_at</text>
+  <text x="520" y="427" text-anchor="middle" font-size="9"  fill="#93c5fd">Returns UUID as magic link token</text>
+
+  <!-- Backend footnotes -->
+  <text x="520" y="452" text-anchor="middle" font-size="9" fill="#93c5fd">uvicorn → localhost:8000</text>
+  <text x="520" y="466" text-anchor="middle" font-size="9" fill="#64748b">FRONTEND_ORIGIN · DB_PATH env vars</text>
+
+  <!-- ── SQLITE DATABASE ───────────────────────────────────────── -->
+  <rect x="408" y="510" width="228" height="112" rx="8" fill="#064e3b" stroke="#059669" stroke-width="2"/>
+  <!-- Green header band -->
+  <rect x="408" y="510" width="228" height="36" fill="#047857" clip-path="url(#clip-db)"/>
+  <text x="522" y="524" text-anchor="middle" font-size="9"  fill="#6ee7b7" font-style="italic">«Database»</text>
+  <text x="522" y="538" text-anchor="middle" font-size="12" fill="white"   font-weight="bold">SQLite (mgc.db)</text>
+  <text x="522" y="556" text-anchor="middle" font-size="9"  fill="#a7f3d0">Communications table</text>
+  <text x="522" y="570" text-anchor="middle" font-size="9"  fill="#6ee7b7">epic_patient_id · fhir_source · patient_name</text>
+  <text x="522" y="584" text-anchor="middle" font-size="9"  fill="#6ee7b7">raw_clinical_text · target_audience</text>
+  <text x="522" y="598" text-anchor="middle" font-size="9"  fill="#6ee7b7">ai_summary_text · status · approved_at</text>
+  <text x="522" y="612" text-anchor="middle" font-size="9"  fill="#6ee7b7">created_at · id (UUID v4)</text>
+
+  <!-- ── EXTERNAL SYSTEMS ──────────────────────────────────────── -->
+
+  <!-- Epic Open FHIR Sandbox -->
+  <rect x="762" y="168" width="284" height="148" rx="8" fill="#f8fafc" stroke="#9ca3af" stroke-width="2"/>
+  <text x="904" y="187" text-anchor="middle" font-size="9"  fill="#6b7280" font-style="italic">«External System»</text>
+  <text x="904" y="204" text-anchor="middle" font-size="12" fill="#111827" font-weight="bold">Epic Open FHIR Sandbox</text>
+  <text x="904" y="220" text-anchor="middle" font-size="9"  fill="#374151">fhir.epic.com · R4 · Unauthenticated</text>
+  <text x="904" y="235" text-anchor="middle" font-size="9"  fill="#374151">Patient.Read — name, DOB, gender, identifier</text>
+  <text x="904" y="250" text-anchor="middle" font-size="9"  fill="#374151">Condition.Read — code, clinicalStatus, note</text>
+  <text x="904" y="265" text-anchor="middle" font-size="9"  fill="#374151">CarePlan.Read — title, description, activity</text>
+  <rect x="826" y="276" width="156" height="22" rx="4" fill="#fef2f2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="904" y="291" text-anchor="middle" font-size="9"  fill="#b91c1c" font-weight="bold">⚠ Synthetic data only · No real PHI</text>
+
+  <!-- LLM API -->
+  <rect x="762" y="342" width="284" height="118" rx="8" fill="#f8fafc" stroke="#9ca3af" stroke-width="2"/>
+  <text x="904" y="361" text-anchor="middle" font-size="9"  fill="#6b7280" font-style="italic">«External System»</text>
+  <text x="904" y="378" text-anchor="middle" font-size="12" fill="#111827" font-weight="bold">LLM API</text>
+  <text x="904" y="394" text-anchor="middle" font-size="9"  fill="#374151">OpenAI GPT-4o or Anthropic Claude</text>
+  <text x="904" y="409" text-anchor="middle" font-size="9"  fill="#374151">Translates FHIR → empathetic patient summary</text>
+  <text x="904" y="424" text-anchor="middle" font-size="9"  fill="#374151">System prompt enforces medical translator role</text>
+  <text x="904" y="439" text-anchor="middle" font-size="9"  fill="#374151">Streaming enabled if latency &gt; 5s</text>
+  <text x="904" y="454" text-anchor="middle" font-size="9"  fill="#6b7280">Configured via API key env var</text>
+
+  <!-- ── ARROWS ────────────────────────────────────────────────── -->
+
+  <!-- 1. Clinician → Frontend (/clinician) -->
+  <line x1="131" y1="104" x2="131" y2="166" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-amber)"/>
+  <rect x="56" y="122" width="112" height="14" rx="3" fill="#fef9c3"/>
+  <text x="112" y="133" text-anchor="middle" font-size="8" fill="#92400e">HTTPS (browser)</text>
+
+  <!-- 2. Patient/Family → /family/:id (routes below boundary via magic link) -->
+  <polyline points="1069,104 1069,660 172,660 172,476" fill="none" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-amber)"/>
+  <rect x="546" y="648" width="168" height="14" rx="3" fill="#fef9c3"/>
+  <text x="630" y="659" text-anchor="middle" font-size="8" fill="#92400e">HTTPS · magic link → /family/:id</text>
+
+  <!-- 3a. Frontend → Backend (request) -->
+  <line x1="292" y1="290" x2="386" y2="290" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- 3b. Backend → Frontend (response) -->
+  <line x1="386" y1="306" x2="292" y2="306" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="302" y="280" width="80" height="14" rx="3" fill="#e2e8f0"/>
+  <text x="342" y="291" text-anchor="middle" font-size="8" fill="#334155">REST / JSON</text>
+
+  <!-- 4. Backend → Epic FHIR Sandbox -->
+  <line x1="653" y1="258" x2="760" y2="226" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="661" y="232" width="104" height="14" rx="3" fill="#e2e8f0"/>
+  <text x="713" y="243" text-anchor="middle" font-size="8" fill="#334155">HTTPS GET (FHIR R4)</text>
+
+  <!-- 5. Backend → LLM API -->
+  <line x1="653" y1="352" x2="760" y2="384" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="661" y="359" width="104" height="14" rx="3" fill="#e2e8f0"/>
+  <text x="713" y="370" text-anchor="middle" font-size="8" fill="#334155">HTTPS POST (prompt)</text>
+
+  <!-- 6a. Backend → SQLite (write) -->
+  <line x1="512" y1="476" x2="512" y2="508" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <!-- 6b. SQLite → Backend (read) -->
+  <line x1="532" y1="508" x2="532" y2="476" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="520" y="488" width="34" height="14" rx="3" fill="#e2e8f0"/>
+  <text x="537" y="499" text-anchor="middle" font-size="8" fill="#334155">SQL</text>
+
+</svg>
