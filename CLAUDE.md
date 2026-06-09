@@ -65,7 +65,7 @@ mgc-sigma-v9/
 | --- | --- | --- |
 | `/` | ✅ Live | Welcome screen — backend health check, link to `/clinician` |
 | `/clinician` | ✅ Live | EHR-embedded tab — patient selector, side-by-side Raw FHIR vs. AI Draft, Approve button |
-| `/family/:id` | ⏳ Pending | Mobile-first patient/family viewer — fetches approved summary by UUID; 404 on unknown ID |
+| `/family/:id` | ✅ Live | Mobile-first patient/family viewer — fetches approved summary by UUID; shows condition diff (new/resolved) if changes exist; 404 on unknown or unapproved ID |
 
 ### Backend API surface
 
@@ -75,7 +75,7 @@ mgc-sigma-v9/
 | `GET /api/patient/{id}` | ✅ Live | Fetch + parse FHIR data (Patient, Condition, CarePlan); falls back to mock JSON for `mock-oncology-123`; creates a Draft `Communications` record; computes three-way condition diff (added/removed/ongoing) vs. last approved record; returns `PatientResponse` with `condition_diff` |
 | `POST /api/generate` | ✅ Live | Accepts `comm_id` + `target_audience`; calls LLM (`LLM_PROVIDER` env var selects Anthropic or OpenAI); stores summary in `Communications`; returns `GenerateResponse` |
 | `POST /api/communications/{id}/approve` | ✅ Live | Saves edited `ai_summary_text`, flips status to `Approved`, returns `id` + `approved_at` + `family_link` |
-| `GET /api/communications/{id}` | ⏳ Pending | Return approved summary for the family viewer |
+| `GET /api/communications/{id}` | ✅ Live | Return approved summary for the family viewer; 404 if unknown or status != Approved |
 
 ### SQLite schema (`Communications` table)
 

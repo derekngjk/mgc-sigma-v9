@@ -77,6 +77,14 @@ class ApproveResponse(BaseModel):
     family_link: str
 
 
+class FamilyViewResponse(BaseModel):
+    id: str
+    patient_name: str
+    ai_summary_text: str
+    approved_at: str
+    condition_diff: ConditionDiff
+
+
 # ── routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -155,6 +163,21 @@ def generate(req: GenerateRequest) -> GenerateResponse:
         comm_id=req.comm_id,
         ai_summary_text=summary,
         target_audience=req.target_audience,
+    )
+
+
+@app.get("/api/communications/{comm_id}", response_model=FamilyViewResponse)
+def get_family_view(comm_id: str) -> FamilyViewResponse:
+    record = get_communication(DB_PATH, comm_id)
+    if record is None or record["status"] != "Approved":
+        raise HTTPException(status_code=404, detail="Summary not found or not yet approved")
+    diff_raw = json.loads(record["condition_diff"]) if record.get("condition_diff") else {"added": [], "removed": [], "ongoing": []}
+    return FamilyViewResponse(
+        id=comm_id,
+        patient_name=record["patient_name"],
+        ai_summary_text=record["ai_summary_text"],
+        approved_at=record["approved_at"],
+        condition_diff=ConditionDiff(**diff_raw),
     )
 
 

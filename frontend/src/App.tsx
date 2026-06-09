@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import ClinicianPage from './pages/ClinicianPage';
+import FamilyPage from './pages/FamilyPage';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -74,6 +75,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<WelcomeScreen />} />
       <Route path="/clinician" element={<ClinicianPage />} />
+      <Route path="/family/:id" element={<FamilyPage />} />
     </Routes>
   );
 }

@@ -251,6 +251,34 @@ UI design decisions were grounded in three reference points:
 
 ---
 
+## Task 4.3 — Patient/Family Mobile Viewer
+
+**Files:** `backend/main.py`, `backend/tests/test_task_4_3.py`, `frontend/src/pages/FamilyPage.tsx`, `frontend/src/App.tsx`
+
+### What was built
+
+A `/family/:id` React route that the magic link (generated at approval) resolves to. It fetches `GET /api/communications/{id}` and renders the approved AI summary in a mobile-first, patient-facing layout. A matching backend endpoint was added that returns the record only when `status = "Approved"` — unapproved or unknown IDs both return 404.
+
+### Backend decisions
+
+**Single endpoint for two error cases (not found + not approved → 404):** From the family's perspective both cases are the same: "this link doesn't work." Returning 403 for a Draft record would leak information about the record's existence. A uniform 404 with a non-specific detail message (`"Summary not found or not yet approved"`) is the correct behaviour for a public-facing link.
+
+**`condition_diff` defaults to empty categories if NULL:** Records created before the condition tracking feature was added may have a NULL `condition_diff`. The route handles this with a safe default (`{"added": [], "removed": [], "ongoing": []}`) rather than failing with a parse error.
+
+**`FamilyViewResponse` reuses `ConditionDiff`:** The same Pydantic model defined for `PatientResponse` is reused here — no duplication. `ai_summary_text` is `str` (not `Optional[str]`) because the route only returns when status is Approved, and approval requires a non-empty summary text.
+
+### Frontend decisions
+
+**No clinician chrome:** The family page has no dark header bar, no PHI warning banner, and no "PoC" badge. Those elements are appropriate for a clinician tool embedded in Epic; they'd be alarming on a page a patient opens on their phone. The header is minimal: brand name + page title in a light border-bottom bar.
+
+**Changes section hidden on first visit / no changes:** The `ChangesSection` component returns `null` when both `added` and `removed` are empty. On a first visit (all conditions in `ongoing`) or when nothing has changed, there is simply no "What's changed" section — patients don't need to read "nothing changed."
+
+**Paragraphs split on double newline:** The AI summary is split on `\n\n` and each fragment rendered as a `<p>`. This preserves the paragraph structure the LLM naturally produces (it writes 3–4 short paragraphs) without requiring any markdown parser dependency.
+
+**`not_found` state uses a lock emoji and plain language:** A 404 page for a patient should be reassuring, not technical. "This summary isn't available. Please check with your care team." is more useful than a raw 404 message.
+
+---
+
 ## Cross-cutting — Condition Change Tracking
 
 **Files:** `backend/db.py`, `backend/main.py`, `backend/llm.py`, `backend/tests/test_change_tracking.py`, `frontend/src/pages/ClinicianPage.tsx`
