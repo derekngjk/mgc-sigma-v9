@@ -187,5 +187,6 @@ For complex or multi-feature requests, do not attempt to write the entire soluti
 2. **Execute one step at a time.** Complete one step, show the diff or result, and stop.
 3. **Wait for review.** Do not proceed to the next step until the user has reviewed and approved the current one.
 4. **Flag blockers early.** If a step depends on a decision not yet made (e.g., schema design, API contract), surface it as a question before writing code that assumes an answer.
+5. **Document work.** Once the feature has been completed, document the work in `implementation-notes.md` following the style of the document.
 
 This applies to: adding new routes, building new UI views, integrating new external services, and any change that touches both `backend/` and `frontend/` in the same request.
