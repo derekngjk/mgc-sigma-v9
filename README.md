@@ -75,3 +75,4 @@ or `OPENAI_API_KEY`) as env vars on the Render dashboard.
 | 4.1 | Clinician dashboard UI (`/clinician`) | ✅ Done |
 | 4.2 | Approval + magic link flow | ✅ Done |
 | 4.3 | Patient/family mobile viewer (`/family/:id`) | ⏳ Pending |
+| CT | Condition change tracking — NEW/ONGOING/RESOLVED diff across visits | ✅ Done |

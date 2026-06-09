@@ -248,3 +248,45 @@ UI design decisions were grounded in three reference points:
 **Approve button fires `console.log` placeholder:** The full approval flow (Task 4.2) requires a `POST /api/communications/{id}/approve` endpoint that doesn't exist yet. The button is present and visually correct (`emerald-600`, enabled only when a generated summary exists) so Task 4.2 is a one-line change — swap the `console.log` for an `await fetch(...)`.
 
 **Color palette: all Tailwind defaults, no custom config:** The dark top bar (`slate-800`), neutral backgrounds (`slate-50`/`slate-100`), indigo action buttons, emerald approve button, and amber warning banner are all from Tailwind's default palette. No theme extensions were needed, keeping `tailwind.config.js` unchanged.
+
+---
+
+## Cross-cutting — Condition Change Tracking
+
+**Files:** `backend/db.py`, `backend/main.py`, `backend/llm.py`, `backend/tests/test_change_tracking.py`, `frontend/src/pages/ClinicianPage.tsx`
+
+### What was built
+
+When a clinician fetches a patient who has a previous approved `Communications` record, the system now computes a three-category diff of active conditions compared to that last approved report:
+
+- **added** — conditions present now that were not present at the last approved report
+- **removed** — conditions from the last approved report that are no longer active
+- **ongoing** — conditions present in both
+
+On a patient's first visit (no prior approved record), all conditions are placed in `ongoing` with `added=[], removed=[]` — semantically correct because there is no previous state to compare against.
+
+The diff is stored in the DB alongside the new record and propagated to both the LLM prompt and the clinician UI.
+
+### Schema decisions
+
+**Two new columns rather than re-parsing FHIR:** The diff is computed at fetch time from the current conditions list and the `conditions_json` stored in the previous approved record. This avoids re-parsing the raw FHIR JSON (which is stored as a serialised string) and keeps the diff logic in one place (`main.py`). The `conditions_json` column stores the parsed, normalised list; `condition_diff` stores the computed three-way result as JSON.
+
+**Migration via `ALTER TABLE ADD COLUMN` with try/except:** `init_db` first runs `CREATE TABLE IF NOT EXISTS` (which defines all columns for a fresh DB), then attempts `ALTER TABLE ADD COLUMN` for the two new columns. SQLite raises `OperationalError` if a column already exists; this is caught and ignored. This gives zero-downtime migration for existing databases without a separate migration tool.
+
+**`condition_diff` is always populated (never NULL):** Unlike an earlier plan variant where only diffs with changes would be stored, every record stores the full three-category object. This simplifies downstream code (family viewer, LLM prompt) — they never need to handle a NULL case.
+
+### Route logic decisions
+
+**Diff computed from set arithmetic:** `added = new - old`, `removed = old - new`, `ongoing = new ∩ old`. Using Python `set` operations ensures correctness even if conditions appear in different orders between visits. Both input lists are normalised (sorted JSON) before storage.
+
+**`get_latest_approved_communication` queries by `approved_at DESC LIMIT 1`:** The most recent approved record is the relevant baseline, not the most recently *created* record. If a clinician fetches a patient, abandons the draft, and then fetches again, only the previously *approved* report is used as the diff baseline.
+
+### LLM prompt decisions
+
+**Condition summary section always injected, "Changes since last report" only when there are changes:** The prompt always includes an `ongoing` list so the LLM has full condition context regardless of whether anything changed. The "Changes since last report" sentence is only appended when `added` or `removed` is non-empty — this prevents the model from mentioning "no changes" on first visits or stable visits, which would be confusing to patients.
+
+### Clinician UI decisions
+
+**Three visual states for conditions:** Green NEW badge (emerald), neutral ONGOING badge (slate, only shown when there is at least one change), and a separate "Resolved since last report" section below the active list with strikethrough text. The ONGOING badge is hidden on first visits (where all conditions are ongoing with no changes) to avoid annotating every condition as "Ongoing" on the very first fetch — the badge only has meaning in comparison to a prior report.
+
+**Resolved conditions shown below active conditions:** Resolved items are not part of the active condition list, so they live in a visually demoted section below. This matches the reading order clinicians would expect: active concerns first, resolved context second.

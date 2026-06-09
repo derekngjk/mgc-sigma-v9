@@ -23,9 +23,19 @@ def init_db(db_path: str) -> None:
                 ai_summary_text   TEXT,
                 status            TEXT NOT NULL DEFAULT 'Draft',
                 created_at        TEXT NOT NULL,
-                approved_at       TEXT
+                approved_at       TEXT,
+                conditions_json   TEXT NOT NULL DEFAULT '[]',
+                condition_diff    TEXT
             )
         """)
+        for col, definition in [
+            ("conditions_json", "TEXT NOT NULL DEFAULT '[]'"),
+            ("condition_diff", "TEXT"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE Communications ADD COLUMN {col} {definition}")
+            except sqlite3.OperationalError:
+                pass  # column already exists
 
 
 def create_communication(
@@ -35,6 +45,8 @@ def create_communication(
     epic_patient_id: str = "",
     fhir_source: str = "sandbox",
     target_audience: str = "family",
+    conditions_json: str = "[]",
+    condition_diff: Optional[str] = None,
 ) -> str:
     comm_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -43,11 +55,12 @@ def create_communication(
             """
             INSERT INTO Communications
                 (id, epic_patient_id, fhir_source, patient_name, raw_clinical_text,
-                 target_audience, ai_summary_text, status, created_at, approved_at)
-            VALUES (?, ?, ?, ?, ?, ?, NULL, 'Draft', ?, NULL)
+                 target_audience, ai_summary_text, status, created_at, approved_at,
+                 conditions_json, condition_diff)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, 'Draft', ?, NULL, ?, ?)
             """,
             (comm_id, epic_patient_id, fhir_source, patient_name, raw_clinical_text,
-             target_audience, now),
+             target_audience, now, conditions_json, condition_diff),
         )
     return comm_id
 
@@ -56,6 +69,20 @@ def get_communication(db_path: str, comm_id: str) -> Optional[dict]:
     with _connect(db_path) as conn:
         row = conn.execute(
             "SELECT * FROM Communications WHERE id = ?", (comm_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def get_latest_approved_communication(db_path: str, epic_patient_id: str) -> Optional[dict]:
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            """
+            SELECT * FROM Communications
+            WHERE epic_patient_id = ? AND status = 'Approved'
+            ORDER BY approved_at DESC
+            LIMIT 1
+            """,
+            (epic_patient_id,),
         ).fetchone()
     return dict(row) if row else None
 

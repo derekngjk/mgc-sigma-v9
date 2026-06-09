@@ -72,7 +72,7 @@ mgc-sigma-v9/
 | Endpoint | Status | Description |
 | --- | --- | --- |
 | `GET /health` | ✅ Live | Liveness check |
-| `GET /api/patient/{id}` | ✅ Live | Fetch + parse FHIR data (Patient, Condition, CarePlan); falls back to mock JSON for `mock-oncology-123`; creates a Draft `Communications` record; returns `PatientResponse` |
+| `GET /api/patient/{id}` | ✅ Live | Fetch + parse FHIR data (Patient, Condition, CarePlan); falls back to mock JSON for `mock-oncology-123`; creates a Draft `Communications` record; computes three-way condition diff (added/removed/ongoing) vs. last approved record; returns `PatientResponse` with `condition_diff` |
 | `POST /api/generate` | ✅ Live | Accepts `comm_id` + `target_audience`; calls LLM (`LLM_PROVIDER` env var selects Anthropic or OpenAI); stores summary in `Communications`; returns `GenerateResponse` |
 | `POST /api/communications/{id}/approve` | ✅ Live | Saves edited `ai_summary_text`, flips status to `Approved`, returns `id` + `approved_at` + `family_link` |
 | `GET /api/communications/{id}` | ⏳ Pending | Return approved summary for the family viewer |
@@ -91,6 +91,8 @@ mgc-sigma-v9/
 | `status` | TEXT NOT NULL | `"Draft"` → `"Approved"` |
 | `created_at` | TEXT NOT NULL | ISO-8601 UTC timestamp |
 | `approved_at` | TEXT | NULL until clinician approves; ISO-8601 UTC timestamp |
+| `conditions_json` | TEXT NOT NULL DEFAULT '[]' | Parsed active conditions for this record as a JSON array — enables diff without re-parsing FHIR |
+| `condition_diff` | TEXT | JSON `{"added": [...], "removed": [...], "ongoing": [...]}` — always populated; first visit has `added=[], removed=[]` and `ongoing` = all conditions |
 
 ---
 

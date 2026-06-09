@@ -20,9 +20,30 @@ class LLMError(Exception): ...
 class LLMConfigError(LLMError): ...
 
 
-def generate_summary(raw_clinical_text: str, target_audience: str) -> str:
+def generate_summary(
+    raw_clinical_text: str,
+    target_audience: str,
+    condition_diff: dict | None = None,
+) -> str:
+    diff_section = ""
+    if condition_diff:
+        added = condition_diff.get("added", [])
+        removed = condition_diff.get("removed", [])
+        ongoing = condition_diff.get("ongoing", [])
+        parts: list[str] = []
+        if ongoing:
+            parts.append(f"Ongoing conditions: {', '.join(ongoing)}")
+        if added:
+            parts.append(f"New conditions since last report: {', '.join(added)}")
+        if removed:
+            parts.append(f"Resolved conditions since last report: {', '.join(removed)}")
+        if parts:
+            diff_section = "\n\nCondition summary:\n" + "\n".join(f"- {p}" for p in parts)
+        if added or removed:
+            diff_section += "\n\nChanges since last report: please mention these changes clearly."
     prompt = (
-        f"{_SYSTEM_PROMPT.format(target_audience=target_audience)}\n\n"
+        f"{_SYSTEM_PROMPT.format(target_audience=target_audience)}"
+        f"{diff_section}\n\n"
         f"Clinical data (JSON):\n{raw_clinical_text}\n\n"
         f"Please translate this for a {target_audience}."
     )

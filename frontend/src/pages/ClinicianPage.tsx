@@ -6,6 +6,12 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 type Stage = 'idle' | 'fetching' | 'ready' | 'generating' | 'generated' | 'approved';
 
+interface ConditionDiff {
+  added: string[];
+  removed: string[];
+  ongoing: string[];
+}
+
 interface PatientData {
   epic_patient_id: string;
   patient_name: string;
@@ -14,6 +20,7 @@ interface PatientData {
   conditions: string[];
   comm_id: string;
   fhir_source: string;
+  condition_diff: ConditionDiff;
 }
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -77,13 +84,46 @@ function ClinicalDataPanel({ patient }: { patient: PatientData }) {
             <p className="text-sm text-slate-400">None recorded</p>
           ) : (
             <ul className="space-y-1">
-              {patient.conditions.map((c) => (
+              {patient.condition_diff.added.map((c) => (
+                <li key={c} className="flex items-start gap-2 text-sm text-slate-700">
+                  <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" />
+                  {c}
+                  <span className="ml-1 rounded-sm bg-emerald-100 px-1 py-0.5 text-xs font-semibold uppercase text-emerald-700">
+                    New
+                  </span>
+                </li>
+              ))}
+              {patient.condition_diff.ongoing.map((c) => (
                 <li key={c} className="flex items-start gap-2 text-sm text-slate-700">
                   <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-indigo-400" />
                   {c}
+                  {(patient.condition_diff.added.length > 0 ||
+                    patient.condition_diff.removed.length > 0) && (
+                    <span className="ml-1 rounded-sm bg-slate-100 px-1 py-0.5 text-xs font-semibold uppercase text-slate-500">
+                      Ongoing
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
+          )}
+          {patient.condition_diff.removed.length > 0 && (
+            <div className="mt-3">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Resolved since last report
+              </p>
+              <ul className="space-y-1">
+                {patient.condition_diff.removed.map((c) => (
+                  <li key={c} className="flex items-start gap-2 text-sm text-slate-400 line-through">
+                    <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-slate-300" />
+                    {c}
+                    <span className="ml-1 rounded-sm bg-slate-100 px-1 py-0.5 text-xs font-semibold uppercase text-slate-400 no-underline" style={{ textDecoration: 'none' }}>
+                      Resolved
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       </div>

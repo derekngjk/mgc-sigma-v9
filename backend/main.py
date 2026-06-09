@@ -1,3 +1,4 @@
+import json
 import os
 from contextlib import asynccontextmanager
 
@@ -5,7 +6,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from db import create_communication, get_communication, init_db, update_communication
+from db import (
+    create_communication,
+    get_communication,
+    get_latest_approved_communication,
+    init_db,
+    update_communication,
+)
 from fhir import FHIRError, PatientNotFoundError, fetch_patient_data
 from llm import LLMConfigError, LLMError, generate_summary
 
@@ -32,6 +39,12 @@ app.add_middleware(
 
 # ── request / response models ─────────────────────────────────────────────────
 
+class ConditionDiff(BaseModel):
+    added: list[str]
+    removed: list[str]
+    ongoing: list[str]
+
+
 class PatientResponse(BaseModel):
     epic_patient_id: str
     patient_name: str
@@ -40,6 +53,7 @@ class PatientResponse(BaseModel):
     conditions: list[str]
     comm_id: str
     fhir_source: str
+    condition_diff: ConditionDiff
 
 
 class GenerateRequest(BaseModel):
@@ -84,6 +98,20 @@ def get_patient(epic_patient_id: str) -> PatientResponse:
     except FHIRError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
+    new_conditions = set(data["conditions"])
+    prev = get_latest_approved_communication(DB_PATH, epic_patient_id)
+    if prev:
+        old_conditions = set(json.loads(prev["conditions_json"]))
+        diff = ConditionDiff(
+            added=sorted(new_conditions - old_conditions),
+            removed=sorted(old_conditions - new_conditions),
+            ongoing=sorted(new_conditions & old_conditions),
+        )
+    else:
+        diff = ConditionDiff(added=[], removed=[], ongoing=sorted(new_conditions))
+
+    diff_json = diff.model_dump_json() if (diff.added or diff.removed) else diff.model_dump_json()
+
     comm_id = create_communication(
         DB_PATH,
         patient_name=data["patient_name"],
@@ -91,6 +119,8 @@ def get_patient(epic_patient_id: str) -> PatientResponse:
         epic_patient_id=epic_patient_id,
         fhir_source=data["fhir_source"],
         target_audience="family",
+        conditions_json=json.dumps(sorted(data["conditions"])),
+        condition_diff=diff_json,
     )
     return PatientResponse(
         epic_patient_id=epic_patient_id,
@@ -100,6 +130,7 @@ def get_patient(epic_patient_id: str) -> PatientResponse:
         conditions=data["conditions"],
         comm_id=comm_id,
         fhir_source=data["fhir_source"],
+        condition_diff=diff,
     )
 
 
@@ -108,8 +139,9 @@ def generate(req: GenerateRequest) -> GenerateResponse:
     record = get_communication(DB_PATH, req.comm_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Communication record not found")
+    condition_diff = json.loads(record["condition_diff"]) if record.get("condition_diff") else None
     try:
-        summary = generate_summary(record["raw_clinical_text"], req.target_audience)
+        summary = generate_summary(record["raw_clinical_text"], req.target_audience, condition_diff)
     except LLMConfigError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except LLMError as exc:
