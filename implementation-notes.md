@@ -164,6 +164,36 @@ SOME_VALUE = os.getenv("SOME_VAR", "safe-local-default")
 
 This makes the codebase portable between local dev, CI, and Render without any code changes.
 
+---
+
+## Task 4.2 — Approval + Magic Link Flow
+
+**Files:** `backend/main.py`, `backend/tests/test_task_4_2.py`, `frontend/src/pages/ClinicianPage.tsx`
+
+### What was built
+
+A `POST /api/communications/{id}/approve` endpoint that persists the clinician's final edited text, flips the record to `"Approved"` (auto-setting `approved_at` via the existing `update_communication` logic), and returns a `family_link` URL pointing to the `/family/:id` route. The frontend `handleApprove` stub was replaced with a real async fetch; on success the two-column layout gives way to a success card showing the copyable link and a "Start New Patient" reset.
+
+### Backend decisions
+
+**`family_link` constructed from `frontend_origin`:** The backend already holds `frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")` for CORS configuration. Reusing it to build the magic link keeps the URL consistent with the actual frontend origin in every environment (local, Render) without adding a new env var.
+
+**Two `get_communication` calls:** The route calls `get_communication` before the update (to check existence) and again after (to read the auto-set `approved_at` timestamp). The alternative — returning a hardcoded `datetime.now()` — would risk a small clock skew between what's returned and what's stored. Reading from DB after write guarantees the response reflects the exact value persisted.
+
+**No 409 on re-approval:** The endpoint allows approving an already-approved record. At PoC scale there is no business rule against re-approving a revised draft, and adding a guard would complicate the demo flow. If idempotency becomes a concern, a 409 check is a one-line addition.
+
+### Frontend decisions
+
+**`approveError` surfaced via existing `generateError` prop slot:** Rather than adding a new prop to `AiDraftPanel`, approve errors are passed as `generateError={generateError ?? approveError}`. Both are "right-panel action errors" and display identically — no UI distinction is needed between "generate failed" and "approve failed".
+
+**Success card replaces the two-column grid:** When `stage === 'approved'`, the grid is conditionally hidden (`stage !== 'approved'` guard) and the success card is shown instead. This avoids a layout flash and makes the approved state feel conclusive rather than additive.
+
+**"Start New Patient" resets all state:** The reset clears all fourteen state variables back to initial values, returning to `'idle'`. This is preferable to a page reload (which would lose the patient selector state) and avoids stale `commId`/`draftText` values leaking into a new session.
+
+---
+
+## Cross-cutting decisions
+
 ### No async in business logic
 
 `db.py` and `fhir.py` are fully synchronous. FastAPI supports sync route handlers natively (it runs them in a thread pool). The PoC has no concurrency requirements that would justify async DB or HTTP calls at this stage. Mixing sync and async code in a PoC adds cognitive overhead with no benefit.

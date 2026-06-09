@@ -4,7 +4,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Stage = 'idle' | 'fetching' | 'ready' | 'generating' | 'generated';
+type Stage = 'idle' | 'fetching' | 'ready' | 'generating' | 'generated' | 'approved';
 
 interface PatientData {
   epic_patient_id: string;
@@ -212,6 +212,8 @@ export default function ClinicianPage() {
   const [commId, setCommId] = useState('');
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [approvedLink, setApprovedLink] = useState('');
 
   async function handleFetch() {
     setStage('fetching');
@@ -261,9 +263,24 @@ export default function ClinicianPage() {
     }
   }
 
-  function handleApprove() {
-    // Wired to POST /api/communications/{id}/approve in Task 4.2
-    console.log('approve:', commId, draftText);
+  async function handleApprove() {
+    setApproveError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/communications/${commId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ai_summary_text: draftText }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(body.detail ?? `HTTP ${res.status}`);
+      }
+      const data = (await res.json()) as { family_link: string };
+      setApprovedLink(data.family_link);
+      setStage('approved');
+    } catch (e) {
+      setApproveError(e instanceof Error ? e.message : 'Unknown error');
+    }
   }
 
   const isFetching = stage === 'fetching';
@@ -306,6 +323,8 @@ export default function ClinicianPage() {
               setDraftText('');
               setFetchError(null);
               setGenerateError(null);
+              setApproveError(null);
+              setApprovedLink('');
             }}
             disabled={isFetching}
             className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -344,7 +363,53 @@ export default function ClinicianPage() {
         </div>
       )}
 
-      {patient && (
+      {/* Approved success card */}
+      {stage === 'approved' && (
+        <div className="mx-auto max-w-2xl px-6 py-16">
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-8">
+            <div className="flex items-center gap-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white">
+                ✓
+              </span>
+              <h2 className="text-lg font-semibold text-emerald-900">Message Approved</h2>
+            </div>
+            <p className="mt-4 text-sm text-emerald-800">
+              Share this link with the patient's family:
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                readOnly
+                value={approvedLink}
+                className="flex-1 rounded-md border border-emerald-300 bg-white px-3 py-2 font-mono text-sm text-slate-700 focus:outline-none"
+              />
+              <button
+                onClick={() => navigator.clipboard.writeText(approvedLink)}
+                className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+              >
+                Copy
+              </button>
+            </div>
+            <button
+              onClick={() => {
+                setStage('idle');
+                setPatient(null);
+                setDraftText('');
+                setCommId('');
+                setApprovedLink('');
+                setApproveError(null);
+                setFetchError(null);
+                setGenerateError(null);
+              }}
+              className="mt-6 text-sm text-emerald-700 underline hover:text-emerald-900"
+            >
+              Start New Patient
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Two-column workflow */}
+      {patient && stage !== 'approved' && (
         <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-6 py-6">
           <ClinicalDataPanel patient={patient} />
           <AiDraftPanel
@@ -352,7 +417,7 @@ export default function ClinicianPage() {
             audience={audience}
             draftText={draftText}
             fetchError={null}
-            generateError={generateError}
+            generateError={generateError ?? approveError}
             commId={commId}
             onAudienceChange={setAudience}
             onDraftChange={setDraftText}

@@ -6,7 +6,7 @@ with a clinician human-in-the-loop approval step before delivery.
 
 ## Repo layout
 
-```
+```text
 mgc-sigma-v9/
 ├── backend/    FastAPI service — FHIR fetch, SQLite state, LLM call, approval flow
 │   ├── main.py             Routes + Pydantic models
@@ -14,7 +14,7 @@ mgc-sigma-v9/
 │   ├── fhir.py             Epic FHIR R4 fetcher + parser
 │   ├── llm.py              LLM translation — Anthropic + OpenAI, env-var selected
 │   ├── mock_data/          Static FHIR fixtures (bypasses live sandbox)
-│   └── tests/              pytest suite (54 tests across tasks 1.1, 1.2, 2.1, 3.1)
+│   └── tests/              pytest suite (63 tests across tasks 1.1, 1.2, 2.1, 3.1, 4.2)
 └── frontend/   React + Vite + TS + Tailwind — Clinician + Family views
     └── src/
         ├── App.tsx             Root component — BrowserRouter routes (/ and /clinician)
@@ -73,5 +73,5 @@ or `OPENAI_API_KEY`) as env vars on the Render dashboard.
 | 2.2 | Mock data fallback — `mock-oncology-123` fixture | ✅ Done |
 | 3.1 | LLM translation — `POST /api/generate` | ✅ Done |
 | 4.1 | Clinician dashboard UI (`/clinician`) | ✅ Done |
-| 4.2 | Approval + magic link flow | ⏳ Pending |
+| 4.2 | Approval + magic link flow | ✅ Done |
 | 4.3 | Patient/family mobile viewer (`/family/:id`) | ⏳ Pending |

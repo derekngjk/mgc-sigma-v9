@@ -53,6 +53,16 @@ class GenerateResponse(BaseModel):
     target_audience: str
 
 
+class ApproveRequest(BaseModel):
+    ai_summary_text: str
+
+
+class ApproveResponse(BaseModel):
+    id: str
+    approved_at: str
+    family_link: str
+
+
 # ── routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -113,4 +123,22 @@ def generate(req: GenerateRequest) -> GenerateResponse:
         comm_id=req.comm_id,
         ai_summary_text=summary,
         target_audience=req.target_audience,
+    )
+
+
+@app.post("/api/communications/{comm_id}/approve", response_model=ApproveResponse)
+def approve_communication(comm_id: str, req: ApproveRequest) -> ApproveResponse:
+    record = get_communication(DB_PATH, comm_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Communication record not found")
+    update_communication(
+        DB_PATH, comm_id,
+        ai_summary_text=req.ai_summary_text,
+        status="Approved",
+    )
+    updated = get_communication(DB_PATH, comm_id)
+    return ApproveResponse(
+        id=comm_id,
+        approved_at=updated["approved_at"],
+        family_link=f"{frontend_origin}/family/{comm_id}",
     )

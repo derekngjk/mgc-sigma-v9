@@ -40,7 +40,8 @@ mgc-sigma-v9/
 │       ├── test_task_1_1.py    Health check + root endpoint (4 tests)
 │       ├── test_task_1_2.py    SQLite CRUD (14 tests)
 │       ├── test_task_2_1.py    FHIR fetcher + mock fallback (22 tests)
-│       └── test_task_3_1.py    LLM translation — happy path, audience, errors, unit (14 tests)
+│       ├── test_task_3_1.py    LLM translation — happy path, audience, errors, unit (14 tests)
+│       └── test_task_4_2.py    Approval + magic link — happy path, DB state, errors (9 tests)
 │
 ├── frontend/                   React 18 + Vite + TypeScript + Tailwind CSS
 │   ├── src/
@@ -73,7 +74,7 @@ mgc-sigma-v9/
 | `GET /health` | ✅ Live | Liveness check |
 | `GET /api/patient/{id}` | ✅ Live | Fetch + parse FHIR data (Patient, Condition, CarePlan); falls back to mock JSON for `mock-oncology-123`; creates a Draft `Communications` record; returns `PatientResponse` |
 | `POST /api/generate` | ✅ Live | Accepts `comm_id` + `target_audience`; calls LLM (`LLM_PROVIDER` env var selects Anthropic or OpenAI); stores summary in `Communications`; returns `GenerateResponse` |
-| `POST /api/communications/{id}/approve` | ⏳ Pending | Save approved text to SQLite, flip status to Approved |
+| `POST /api/communications/{id}/approve` | ✅ Live | Saves edited `ai_summary_text`, flips status to `Approved`, returns `id` + `approved_at` + `family_link` |
 | `GET /api/communications/{id}` | ⏳ Pending | Return approved summary for the family viewer |
 
 ### SQLite schema (`Communications` table)
