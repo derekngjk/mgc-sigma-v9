@@ -1,0 +1,84 @@
+{
+  "patient": {
+    "resourceType": "Patient",
+    "id": "mock-pediatric-789",
+    "name": [
+      {
+        "use": "official",
+        "text": "Lily Chen",
+        "family": "Chen",
+        "given": ["Lily"]
+      }
+    ],
+    "birthDate": "2017-02-19",
+    "gender": "female"
+  },
+  "conditions": {
+    "resourceType": "Bundle",
+    "type": "searchset",
+    "entry": [
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "code": {
+            "coding": [{ "display": "Acute lymphoblastic leukaemia, B-cell precursor" }],
+            "text": "Acute lymphoblastic leukaemia, B-cell precursor"
+          },
+          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "note": [{ "text": "Standard risk. Completed induction and consolidation. Currently in maintenance phase (month 14 of 24)." }]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "code": {
+            "coding": [{ "display": "Neutropenia" }],
+            "text": "Neutropenia"
+          },
+          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "note": [{ "text": "ANC 0.8 x10^9/L at last count. Prophylactic co-trimoxazole and antifungal in place. Fever precautions reviewed with family." }]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "clinicalStatus": { "coding": [{ "code": "resolved" }] },
+          "code": {
+            "coding": [{ "display": "Mucositis" }],
+            "text": "Mucositis"
+          },
+          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "note": [{ "text": "Grade 2 mucositis during consolidation phase. Resolved." }]
+        }
+      }
+    ]
+  },
+  "care_plans": {
+    "resourceType": "Bundle",
+    "type": "searchset",
+    "entry": [
+      {
+        "resource": {
+          "resourceType": "CarePlan",
+          "status": "active",
+          "title": "ALL Maintenance Chemotherapy Plan",
+          "description": "Continuation of standard-risk ALL maintenance per COG AALL0434 protocol. Oral 6-mercaptopurine daily and weekly methotrexate. Monthly clinic visits for CBC and toxicity review.",
+          "activity": [
+            { "detail": { "description": "Oral 6-mercaptopurine 75 mg/m² daily (evening, fasting)" } },
+            { "detail": { "description": "Weekly oral methotrexate 20 mg/m²" } },
+            { "detail": { "description": "Monthly clinic visit — CBC, liver function, toxicity assessment" } },
+            { "detail": { "description": "Prophylactic co-trimoxazole (Mon/Tue/Wed) — Pneumocystis prophylaxis" } },
+            { "detail": { "description": "Interim maintenance lumbar puncture with intrathecal methotrexate at month 18" } }
+          ],
+          "goal": [
+            { "display": "Maintain remission through completion of 24-month maintenance protocol" },
+            { "display": "Monitor for and minimise chemotherapy toxicity (hepatotoxicity, myelosuppression)" },
+            { "display": "Support family with school re-integration and psychosocial wellbeing" }
+          ]
+        }
+      }
+    ]
+  }
+}

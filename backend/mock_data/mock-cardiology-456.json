@@ -1,0 +1,96 @@
+{
+  "patient": {
+    "resourceType": "Patient",
+    "id": "mock-cardiology-456",
+    "name": [
+      {
+        "use": "official",
+        "text": "Marcus Thompson",
+        "family": "Thompson",
+        "given": ["Marcus"]
+      }
+    ],
+    "birthDate": "1957-09-03",
+    "gender": "male"
+  },
+  "conditions": {
+    "resourceType": "Bundle",
+    "type": "searchset",
+    "entry": [
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "code": {
+            "coding": [{ "display": "Chronic systolic heart failure, NYHA Class III" }],
+            "text": "Chronic systolic heart failure, NYHA Class III"
+          },
+          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "note": [{ "text": "EF 32%. On sacubitril/valsartan, carvedilol, and spironolactone. Last echo 6 weeks ago." }]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "code": {
+            "coding": [{ "display": "Type 2 diabetes mellitus" }],
+            "text": "Type 2 diabetes mellitus"
+          },
+          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "note": [{ "text": "HbA1c 7.8% at last check. On metformin 1g BD and empagliflozin 10mg daily." }]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "code": {
+            "coding": [{ "display": "Hypertension" }],
+            "text": "Hypertension"
+          },
+          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "note": [{ "text": "Controlled on current regimen. Target BP <130/80." }]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "clinicalStatus": { "coding": [{ "code": "resolved" }] },
+          "code": {
+            "coding": [{ "display": "Acute decompensated heart failure" }],
+            "text": "Acute decompensated heart failure"
+          },
+          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "note": [{ "text": "Hospitalisation 4 months ago. Resolved with IV diuresis." }]
+        }
+      }
+    ]
+  },
+  "care_plans": {
+    "resourceType": "Bundle",
+    "type": "searchset",
+    "entry": [
+      {
+        "resource": {
+          "resourceType": "CarePlan",
+          "status": "active",
+          "title": "Heart Failure Management Plan",
+          "description": "Optimise guideline-directed medical therapy, monitor volume status, and reduce re-hospitalisation risk. Daily weight monitoring and fluid restriction to 1.5 L/day.",
+          "activity": [
+            { "detail": { "description": "Daily weight measurement — alert care team if weight increases >2 kg in 2 days" } },
+            { "detail": { "description": "Fluid restriction 1.5 L per day including all beverages" } },
+            { "detail": { "description": "Cardiac rehabilitation programme — 3 sessions per week for 12 weeks" } },
+            { "detail": { "description": "Follow-up echocardiogram in 3 months to reassess ejection fraction" } },
+            { "detail": { "description": "HbA1c recheck in 6 weeks to evaluate glycaemic response to empagliflozin" } }
+          ],
+          "goal": [
+            { "display": "Improve NYHA functional class from III to II" },
+            { "display": "Prevent rehospitalisation for acute decompensation" },
+            { "display": "Achieve HbA1c below 7.0% within 3 months" }
+          ]
+        }
+      }
+    ]
+  }
+}

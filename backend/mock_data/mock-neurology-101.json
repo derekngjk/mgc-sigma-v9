@@ -1,0 +1,96 @@
+{
+  "patient": {
+    "resourceType": "Patient",
+    "id": "mock-neurology-101",
+    "name": [
+      {
+        "use": "official",
+        "text": "Amara Osei",
+        "family": "Osei",
+        "given": ["Amara"]
+      }
+    ],
+    "birthDate": "1982-11-07",
+    "gender": "female"
+  },
+  "conditions": {
+    "resourceType": "Bundle",
+    "type": "searchset",
+    "entry": [
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "code": {
+            "coding": [{ "display": "Relapsing-remitting multiple sclerosis" }],
+            "text": "Relapsing-remitting multiple sclerosis"
+          },
+          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "note": [{ "text": "Diagnosed 6 years ago. Two relapses in the past 3 years. Currently on natalizumab (Tysabri) IV infusion every 4 weeks. JC virus antibody positive — risk stratification ongoing." }]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "code": {
+            "coding": [{ "display": "MS-related fatigue syndrome" }],
+            "text": "MS-related fatigue syndrome"
+          },
+          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "note": [{ "text": "Fatigue Impact Scale score 62/84. Managed with amantadine and structured rest periods. Occupational therapy referral in place." }]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "code": {
+            "coding": [{ "display": "Neurogenic bladder dysfunction" }],
+            "text": "Neurogenic bladder dysfunction"
+          },
+          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "note": [{ "text": "Urinary urgency and incomplete emptying. Managed with solifenacin 5mg daily and timed voiding schedule. Urology review every 6 months." }]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "clinicalStatus": { "coding": [{ "code": "resolved" }] },
+          "code": {
+            "coding": [{ "display": "Optic neuritis, left eye" }],
+            "text": "Optic neuritis, left eye"
+          },
+          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "note": [{ "text": "Presenting symptom at diagnosis. Treated with IV methylprednisolone. Vision recovered to near-baseline." }]
+        }
+      }
+    ]
+  },
+  "care_plans": {
+    "resourceType": "Bundle",
+    "type": "searchset",
+    "entry": [
+      {
+        "resource": {
+          "resourceType": "CarePlan",
+          "status": "active",
+          "title": "MS Disease-Modifying Therapy and Symptom Management Plan",
+          "description": "Continuation of natalizumab therapy with quarterly MRI surveillance and annual JC virus antibody index monitoring. Symptom management for fatigue and bladder dysfunction. Physiotherapy and occupational therapy support.",
+          "activity": [
+            { "detail": { "description": "Natalizumab 300mg IV infusion every 4 weeks — next infusion in 3 weeks" } },
+            { "detail": { "description": "Brain and spinal cord MRI with contrast every 6 months — surveillance for new lesions or PML" } },
+            { "detail": { "description": "Annual JC virus antibody index — current index 2.1, discuss therapy switch if index rises further" } },
+            { "detail": { "description": "Physiotherapy — core strengthening and balance exercises twice weekly" } },
+            { "detail": { "description": "Neuropsychology assessment in 2 months to screen for cognitive changes" } }
+          ],
+          "goal": [
+            { "display": "Prevent further relapses and new MRI lesion activity" },
+            { "display": "Reduce fatigue impact to allow continued employment and daily activities" },
+            { "display": "Minimise risk of progressive multifocal leukoencephalopathy (PML)" }
+          ]
+        }
+      }
+    ]
+  }
+}

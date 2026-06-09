@@ -9,7 +9,6 @@ FHIR_BASE_URL: str = os.getenv(
     "FHIR_BASE_URL",
     "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/",
 )
-MOCK_PATIENT_ID: str = "mock-oncology-123"
 MOCK_DATA_DIR: Path = Path(__file__).parent / "mock_data"
 
 
@@ -32,8 +31,9 @@ def fetch_patient_data(epic_patient_id: str) -> dict[str, Any]:
     normalised dict with keys:
         patient_name, dob, gender, conditions, raw_fhir_json, fhir_source
     """
-    if epic_patient_id == MOCK_PATIENT_ID:
-        return load_mock_patient()
+    mock_path = MOCK_DATA_DIR / f"{epic_patient_id}.json"
+    if mock_path.exists():
+        return load_mock_patient(epic_patient_id)
     raw = _fetch_from_sandbox(epic_patient_id)
     parsed = _parse_fhir_bundle(raw)
     return {
@@ -46,9 +46,9 @@ def fetch_patient_data(epic_patient_id: str) -> dict[str, Any]:
     }
 
 
-def load_mock_patient() -> dict[str, Any]:
-    """Load and parse mock-oncology-123.json."""
-    path = MOCK_DATA_DIR / f"{MOCK_PATIENT_ID}.json"
+def load_mock_patient(patient_id: str = "mock-oncology-123") -> dict[str, Any]:
+    """Load and parse a mock patient JSON fixture from mock_data/."""
+    path = MOCK_DATA_DIR / f"{patient_id}.json"
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError) as exc:

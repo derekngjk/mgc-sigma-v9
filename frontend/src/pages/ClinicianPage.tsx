@@ -28,7 +28,23 @@ interface PatientData {
 const PATIENTS = [
   {
     id: 'mock-oncology-123',
-    label: 'mock-oncology-123 — Elena Vasquez (Mock Oncology)',
+    label: 'Elena Vasquez — Breast cancer, stage III (Mock)',
+  },
+  {
+    id: 'mock-cardiology-456',
+    label: 'Marcus Thompson — Heart failure, T2DM (Mock)',
+  },
+  {
+    id: 'mock-pediatric-789',
+    label: 'Lily Chen — Paediatric ALL maintenance (Mock)',
+  },
+  {
+    id: 'mock-neurology-101',
+    label: 'Amara Osei — Relapsing-remitting MS (Mock)',
+  },
+  {
+    id: 'mock-geriatric-202',
+    label: 'Robert Kim — Alzheimer\'s, AFib, osteoporosis (Mock)',
   },
   {
     id: 'eovIMNNn7tHBQwLGAXNRRw3',
