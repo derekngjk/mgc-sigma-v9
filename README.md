@@ -60,8 +60,8 @@ cd backend
 ## Deploy
 
 `render.yaml` defines two Render services (web app + API). Set `FRONTEND_ORIGIN`,
-`DB_PATH`, `FHIR_BASE_URL`, `LLM_PROVIDER`, and the relevant API key (`ANTHROPIC_API_KEY`
-or `OPENAI_API_KEY`) as env vars on the Render dashboard.
+`DB_PATH`, `FHIR_BASE_URL`, `LLM_PROVIDER`, and the relevant API key (`ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY`, or `GEMINI_API_KEY`) as env vars on the Render dashboard.
 
 ## Status
 

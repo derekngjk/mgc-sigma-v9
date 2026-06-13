@@ -20,7 +20,7 @@ The PoC will operate as a standalone web application that visually simulates bei
 | **Integration Standard** | Epic Open FHIR R4 Sandbox (unauthenticated/open endpoints for synthetic data) |
 | **Backend Framework** | Python (FastAPI) – lightweight and ideal for rapid API development and LLM integration |
 | **Frontend Framework** | React.js / TypeScript with TailwindCSS – deployed as a single application with two routing namespaces (one simulating the Clinician View, one simulating the Family View) |
-| **AI/NLP Engine** | Standard OpenAI API (GPT-4o) or Anthropic API. Constraint: Strictly utilizing synthetic Sandbox data, meaning HIPAA compliance is not required for this phase |
+| **AI/NLP Engine** | Standard OpenAI API (GPT-4o), Anthropic API (Claude), or Google Gemini API (gemini-3.5-flash). Constraint: Strictly utilizing synthetic Sandbox data, meaning HIPAA compliance is not required for this phase |
 | **Database** | SQLite or an in-memory JSON store (to temporarily hold state between the clinician approval and the family viewer) |
 | **Infrastructure** | PaaS deployment (e.g., Render, Heroku, or Vercel) for rapid iteration and zero DevOps overhead |
 

@@ -1,10 +1,16 @@
 import os
 
+from dotenv import find_dotenv, load_dotenv
+
+load_dotenv(find_dotenv())
+
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 ANTHROPIC_MODEL = "claude-opus-4-7"
 OPENAI_MODEL = "gpt-4o"
+GEMINI_MODEL = "gemini-3.5-flash"
 
 _SYSTEM_PROMPT = (
     "You are a medical translator helping patients and their families understand "
@@ -17,6 +23,8 @@ _SYSTEM_PROMPT = (
 
 
 class LLMError(Exception): ...
+
+
 class LLMConfigError(LLMError): ...
 
 
@@ -38,9 +46,13 @@ def generate_summary(
         if removed:
             parts.append(f"Resolved conditions since last report: {', '.join(removed)}")
         if parts:
-            diff_section = "\n\nCondition summary:\n" + "\n".join(f"- {p}" for p in parts)
+            diff_section = "\n\nCondition summary:\n" + "\n".join(
+                f"- {p}" for p in parts
+            )
         if added or removed:
-            diff_section += "\n\nChanges since last report: please mention these changes clearly."
+            diff_section += (
+                "\n\nChanges since last report: please mention these changes clearly."
+            )
     prompt = (
         f"{_SYSTEM_PROMPT.format(target_audience=target_audience)}"
         f"{diff_section}\n\n"
@@ -55,6 +67,7 @@ def _call_llm(prompt: str) -> str:
         if not ANTHROPIC_API_KEY:
             raise LLMConfigError("ANTHROPIC_API_KEY is not set")
         import anthropic
+
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         message = client.messages.create(
             model=ANTHROPIC_MODEL,
@@ -66,6 +79,7 @@ def _call_llm(prompt: str) -> str:
         if not OPENAI_API_KEY:
             raise LLMConfigError("OPENAI_API_KEY is not set")
         import openai
+
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
@@ -73,7 +87,18 @@ def _call_llm(prompt: str) -> str:
             max_tokens=1024,
         )
         return response.choices[0].message.content
+    elif LLM_PROVIDER == "google":
+        if not GEMINI_API_KEY:
+            raise LLMConfigError("GEMINI_API_KEY is not set")
+        from google import genai
+
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+        )
+        return response.text
     else:
         raise LLMConfigError(
-            f"Unknown LLM_PROVIDER: {LLM_PROVIDER!r}. Use 'anthropic' or 'openai'."
+            f"Unknown LLM_PROVIDER: {LLM_PROVIDER!r}. Use 'anthropic', 'openai', or 'google'."
         )
