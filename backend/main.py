@@ -16,28 +16,37 @@ from db import (
 from fhir import FHIRError, PatientNotFoundError, fetch_patient_data
 from llm import LLMConfigError, LLMError, generate_summary
 
-DB_PATH = os.getenv("DB_PATH", "mgc.db")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db(DB_PATH)
+    # Only try to init if we have a DB URL, otherwise it might be a test environment
+    if SUPABASE_DB_URL:
+        init_db(SUPABASE_DB_URL)
     yield
 
 
 app = FastAPI(title="MGC PoC API", version="0.1.0", lifespan=lifespan)
 
+# CORS configuration
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[frontend_origin, "http://localhost:5173"],
-    allow_credentials=False,
+    allow_origins=[frontend_origin],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# ── request / response models ─────────────────────────────────────────────────
+class HealthResponse(BaseModel):
+    status: str
+    service: str
+    version: str
+
 
 class ConditionDiff(BaseModel):
     added: list[str]
@@ -46,12 +55,11 @@ class ConditionDiff(BaseModel):
 
 
 class PatientResponse(BaseModel):
-    epic_patient_id: str
+    comm_id: str
     patient_name: str
     dob: str
     gender: str
     conditions: list[str]
-    comm_id: str
     fhir_source: str
     condition_diff: ConditionDiff
 
@@ -85,11 +93,9 @@ class FamilyViewResponse(BaseModel):
     condition_diff: ConditionDiff
 
 
-# ── routes ────────────────────────────────────────────────────────────────────
-
-@app.get("/health")
+@app.get("/health", response_model=HealthResponse)
 def health():
-    return {"status": "ok", "service": "mgc-backend", "version": "0.1.0"}
+    return HealthResponse(status="ok", service="mgc-backend", version="0.1.0")
 
 
 @app.get("/")
@@ -107,7 +113,7 @@ def get_patient(epic_patient_id: str) -> PatientResponse:
         raise HTTPException(status_code=502, detail=str(exc))
 
     new_conditions = set(data["conditions"])
-    prev = get_latest_approved_communication(DB_PATH, epic_patient_id)
+    prev = get_latest_approved_communication(epic_patient_id)
     if prev:
         old_conditions = set(json.loads(prev["conditions_json"]))
         diff = ConditionDiff(
@@ -118,25 +124,24 @@ def get_patient(epic_patient_id: str) -> PatientResponse:
     else:
         diff = ConditionDiff(added=[], removed=[], ongoing=sorted(new_conditions))
 
-    diff_json = diff.model_dump_json() if (diff.added or diff.removed) else diff.model_dump_json()
+    diff_json = diff.model_dump_json()
 
     comm_id = create_communication(
-        DB_PATH,
         patient_name=data["patient_name"],
         raw_clinical_text=data["raw_fhir_json"],
         epic_patient_id=epic_patient_id,
         fhir_source=data["fhir_source"],
         target_audience="family",
-        conditions_json=json.dumps(sorted(data["conditions"])),
+        conditions_json=json.dumps(data["conditions"]),
         condition_diff=diff_json,
     )
+
     return PatientResponse(
-        epic_patient_id=epic_patient_id,
+        comm_id=comm_id,
         patient_name=data["patient_name"],
         dob=data["dob"],
         gender=data["gender"],
         conditions=data["conditions"],
-        comm_id=comm_id,
         fhir_source=data["fhir_source"],
         condition_diff=diff,
     )
@@ -144,18 +149,22 @@ def get_patient(epic_patient_id: str) -> PatientResponse:
 
 @app.post("/api/generate", response_model=GenerateResponse)
 def generate(req: GenerateRequest) -> GenerateResponse:
-    record = get_communication(DB_PATH, req.comm_id)
+    record = get_communication(req.comm_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Communication record not found")
-    condition_diff = json.loads(record["condition_diff"]) if record.get("condition_diff") else None
+    condition_diff = (
+        json.loads(record["condition_diff"]) if record.get("condition_diff") else None
+    )
     try:
-        summary = generate_summary(record["raw_clinical_text"], req.target_audience, condition_diff)
+        summary = generate_summary(
+            record["raw_clinical_text"], req.target_audience, condition_diff
+        )
     except LLMConfigError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
     update_communication(
-        DB_PATH, req.comm_id,
+        req.comm_id,
         ai_summary_text=summary,
         target_audience=req.target_audience,
     )
@@ -168,10 +177,16 @@ def generate(req: GenerateRequest) -> GenerateResponse:
 
 @app.get("/api/communications/{comm_id}", response_model=FamilyViewResponse)
 def get_family_view(comm_id: str) -> FamilyViewResponse:
-    record = get_communication(DB_PATH, comm_id)
+    record = get_communication(comm_id)
     if record is None or record["status"] != "Approved":
-        raise HTTPException(status_code=404, detail="Summary not found or not yet approved")
-    diff_raw = json.loads(record["condition_diff"]) if record.get("condition_diff") else {"added": [], "removed": [], "ongoing": []}
+        raise HTTPException(
+            status_code=404, detail="Summary not found or not yet approved"
+        )
+    diff_raw = (
+        json.loads(record["condition_diff"])
+        if record.get("condition_diff")
+        else {"added": [], "removed": [], "ongoing": []}
+    )
     return FamilyViewResponse(
         id=comm_id,
         patient_name=record["patient_name"],
@@ -183,15 +198,15 @@ def get_family_view(comm_id: str) -> FamilyViewResponse:
 
 @app.post("/api/communications/{comm_id}/approve", response_model=ApproveResponse)
 def approve_communication(comm_id: str, req: ApproveRequest) -> ApproveResponse:
-    record = get_communication(DB_PATH, comm_id)
+    record = get_communication(comm_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Communication record not found")
     update_communication(
-        DB_PATH, comm_id,
+        comm_id,
         ai_summary_text=req.ai_summary_text,
         status="Approved",
     )
-    updated = get_communication(DB_PATH, comm_id)
+    updated = get_communication(comm_id)
     return ApproveResponse(
         id=comm_id,
         approved_at=updated["approved_at"],
