@@ -318,3 +318,40 @@ The diff is stored in the DB alongside the new record and propagated to both the
 **Three visual states for conditions:** Green NEW badge (emerald), neutral ONGOING badge (slate, only shown when there is at least one change), and a separate "Resolved since last report" section below the active list with strikethrough text. The ONGOING badge is hidden on first visits (where all conditions are ongoing with no changes) to avoid annotating every condition as "Ongoing" on the very first fetch — the badge only has meaning in comparison to a prior report.
 
 **Resolved conditions shown below active conditions:** Resolved items are not part of the active condition list, so they live in a visually demoted section below. This matches the reading order clinicians would expect: active concerns first, resolved context second.
+
+---
+
+## Feature Roadmap & TODOs
+
+The following core features are required to align the current proof-of-concept with the target functional architecture:
+
+1. **Database Migration to Supabase (HIPAA Compliant)**
+   * Migrate the local SQLite schema to Supabase (Postgres).
+   * Establish tables for `profiles`, `clinics`, `families`, `patients`, `care_plans`, and `care_plan_translations`.
+
+2. **Update Family Access Route**
+   * Refactor the frontend router and backend endpoints to use the secure, structured `/family/:fid/member/:mid` path.
+   * Implement token-based validation for family member access.
+
+3. **Multilingual Translation**
+   * Integrate translation services to translate approved summaries into Singapore's official languages: English (EN), Chinese (ZH), Malay (MS), and Tamil (TA).
+   * Incorporate a clinical glossary to ensure translation accuracy of medical terms.
+
+4. **Text-to-Speech (TTS) Generation**
+   * Integrate a TTS engine to synthesize audio (MP3) of the translated summaries.
+   * Store generated audio files in Supabase Storage or AWS S3.
+
+5. **Visual Aid Generation (Nano Banana)**
+   * Integrate an image generation model (e.g., Gemini 2.5 Flash Image) to generate supportive visual illustrations for the patient care plan.
+   * Store and serve these images alongside the summaries.
+
+6. **Audio Playback & Visuals in Family Viewer**
+   * Update the mobile-first Family Viewer page to include an audio player component for TTS playback.
+   * Add an image viewer component to display the generated visual aids.
+
+7. **Clinician Authentication (AuthGate)**
+   * Implement Supabase Auth on the frontend to gate clinician access.
+   * Add JWT verification middleware on the backend to secure clinician-only endpoints.
+
+8. **Delivery Stub**
+   * Implement a utility to generate QR codes and printable magic-link handouts directly from the clinician dashboard at the point of care.
