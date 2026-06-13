@@ -3,19 +3,20 @@
 Proof-of-concept web app that simulates being embedded in Epic EHR. Translates
 synthetic FHIR clinical data into patient/family-friendly summaries via LLM,
 with a clinician human-in-the-loop approval step before delivery.
-
 ## Repo layout
 
 ```text
 mgc-sigma-v9/
-├── backend/    FastAPI service — FHIR fetch, SQLite state, LLM call, approval flow
+├── backend/    FastAPI service — FHIR fetch, Supabase state, LLM call, approval flow
 │   ├── main.py             Routes + Pydantic models
-│   ├── db.py               SQLite CRUD layer
+│   ├── db.py               Supabase CRUD layer (PostgreSQL)
 │   ├── fhir.py             Epic FHIR R4 fetcher + parser
 │   ├── llm.py              LLM translation — Anthropic + OpenAI, env-var selected
 │   ├── mock_data/          Static FHIR fixtures (bypasses live sandbox)
-│   └── tests/              pytest suite (63 tests across tasks 1.1, 1.2, 2.1, 3.1, 4.2)
+│   └── tests/              pytest suite (21 tests using mocked Supabase client)
 └── frontend/   React + Vite + TS + Tailwind — Clinician + Family views
+```
+
     └── src/
         ├── App.tsx             Root component — BrowserRouter routes (/ and /clinician)
         └── pages/
@@ -28,11 +29,10 @@ mgc-sigma-v9/
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\Activate.ps1
-pip install -r requirements-dev.txt
-cp .env.example .env               # set FRONTEND_ORIGIN, DB_PATH, FHIR_BASE_URL, ANTHROPIC_API_KEY / OPENAI_API_KEY
-uvicorn main:app --reload --port 8000
+# Install uv if you haven't: https://docs.astral.sh/uv/getting-started/installation/
+uv sync
+cp .env.example .env               # set SUPABASE_URL, SUPABASE_KEY, SUPABASE_DB_URL
+uv run uvicorn main:app --reload --port 8000
 ```
 
 Health check: <http://localhost:8000/health>  
@@ -49,19 +49,20 @@ npm run dev
 
 Open: <http://localhost:5173> (welcome screen) or <http://localhost:5173/clinician> (clinician view)
 
-### Running tests
+### Running tests & Linting
 
 ```bash
 cd backend
-.venv/bin/pytest -v                              # full suite
-.venv/bin/pytest tests/test_task_3_1.py -v      # single file
+uv run pytest                        # run full suite
+uv run ruff check .                  # lint check
+uv run ruff format .                 # apply formatting
 ```
 
 ## Deploy
 
 `render.yaml` defines two Render services (web app + API). Set `FRONTEND_ORIGIN`,
-`DB_PATH`, `FHIR_BASE_URL`, `LLM_PROVIDER`, and the relevant API key (`ANTHROPIC_API_KEY`,
-`OPENAI_API_KEY`, or `GEMINI_API_KEY`) as env vars on the Render dashboard.
+`SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_DB_URL`, `FHIR_BASE_URL`, `LLM_PROVIDER`, 
+and the relevant API key as env vars on the Render dashboard.
 
 ## Status
 

@@ -21,7 +21,7 @@ The PoC will operate as a standalone web application that visually simulates bei
 | **Backend Framework** | Python (FastAPI) – lightweight and ideal for rapid API development and LLM integration |
 | **Frontend Framework** | React.js / TypeScript with TailwindCSS – deployed as a single application with two routing namespaces (one simulating the Clinician View, one simulating the Family View) |
 | **AI/NLP Engine** | Standard OpenAI API (GPT-4o), Anthropic API (Claude), or Google Gemini API (gemini-3.5-flash). Constraint: Strictly utilizing synthetic Sandbox data, meaning HIPAA compliance is not required for this phase |
-| **Database** | SQLite or an in-memory JSON store (to temporarily hold state between the clinician approval and the family viewer) |
+| **Database** | Supabase (PostgreSQL) – normalized schema with `patients` and `care_plan_translations` tables |
 | **Infrastructure** | PaaS deployment (e.g., Render, Heroku, or Vercel) for rapid iteration and zero DevOps overhead |
 
 ---
@@ -38,11 +38,11 @@ The PoC will operate as a standalone web application that visually simulates bei
 
 4. **HITL Mock UI**: The React app displays the raw clinical data on the left and the AI-generated draft on the right. The user (acting as the clinician) edits and clicks "Approve".
 
-5. **State Management**: The backend saves the approved text and a generated token_id into a local SQLite database.
+5. **State Management**: The backend saves the approved text and metadata into a normalized Supabase database.
 
-6. **Simulated Delivery**: The Clinician UI displays a "Magic Link" URL containing the token_id.
+6. **Simulated Delivery**: The Clinician UI displays a "Magic Link" URL containing the translation record's UUID.
 
-7. **Patient Viewer Mock**: Opening the Magic Link navigates to the Patient Viewer route in the React app, which fetches the approved text from the SQLite DB using the token and displays it in a mobile-friendly layout.
+7. **Patient Viewer Mock**: Opening the Magic Link navigates to the Patient Viewer route in the React app, which fetches the approved text from Supabase and displays it in a mobile-friendly layout.
 
 ---
 
@@ -87,28 +87,13 @@ The PoC will operate as a standalone web application that visually simulates bei
 
 **Acceptance Criteria**: Both backend API (returning a 200 OK health check) and frontend (displaying a basic welcome screen) are live on public URLs.
 
-#### Task 1.2: Setup SQLite State Store
+#### Task 1.2: Setup Supabase State Store
 
-**Technical Details**: Implement an SQLite database in the FastAPI backend with a single table `Communications` containing:
-
-| Column | Type | Notes |
-| --- | --- | --- |
-| `id` | TEXT PK | UUID v4 |
-| `epic_patient_id` | TEXT NOT NULL | Patient.identifier from Epic Sandbox (Base64-encoded, e.g. `eovIMNNn7tHB…`). Use `mock-oncology-123` to trigger the hardcoded mock fallback. |
-| `fhir_source` | TEXT NOT NULL | `"sandbox"` or `"mock"` — records which data path produced the raw clinical text |
-| `patient_name` | TEXT NOT NULL | Patient.name from FHIR |
-| `raw_clinical_text` | TEXT NOT NULL | Serialised FHIR payload (Condition + CarePlan) sent to the LLM |
-| `target_audience` | TEXT NOT NULL | LLM prompt parameter — `"patient"` or `"family"` (default `"family"`) |
-| `ai_summary_text` | TEXT | NULL until LLM generates a draft |
-| `status` | TEXT NOT NULL | `"Draft"` → `"Approved"` |
-| `created_at` | TEXT NOT NULL | ISO-8601 UTC timestamp, set on insert |
-| `approved_at` | TEXT | NULL until clinician approves; ISO-8601 UTC timestamp |
-
-**Rationale for additions vs. original schema**: `epic_patient_id` and `fhir_source` were added after reviewing the Epic Open FHIR R4 API — every record must trace back to a specific patient identifier and data source. `target_audience` maps directly to the LLM prompt parameter defined in Task 3.1. `approved_at` provides a minimal audit trail for the HITL approval step.
+**Technical Details**: Implement a normalized schema in Supabase (PostgreSQL) consisting of `patients` and `care_plan_translations` tables. Use `psycopg3` for idempotent schema auto-initialization on startup.
 
 **Dependencies**: Task 1.1
 
-**Acceptance Criteria**: Backend can successfully create, read, and update records in the local SQLite database.
+**Acceptance Criteria**: Backend can successfully create, read, and update records in the Supabase database.
 
 ### Epic 2: Epic Open Sandbox Integration
 
@@ -154,7 +139,7 @@ Expose this as an endpoint `/api/generate`.
 
 #### Task 4.2: Build Approval & Link Generation Flow
 
-**Technical Details**: When "Approve" is clicked in the UI, send the final text to the backend to update the SQLite record status to "Approved". The backend returns the `id` (UUID). The frontend displays a mock modal: "Message Sent! Family Link: `[baseUrl]/family/{uuid}`".
+**Technical Details**: When "Approve" is clicked in the UI, send the final text to the backend to update the Supabase record status to "Approved". The backend returns the `id` (UUID). The frontend displays a mock modal: "Message Sent! Family Link: `[baseUrl]/family/{uuid}`".
 
 **Dependencies**: Task 1.2, Task 4.1
 
