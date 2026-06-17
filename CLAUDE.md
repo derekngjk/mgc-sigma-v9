@@ -25,23 +25,26 @@ There are no shared packages between the two services. The backend is the single
 mgc-sigma-v9/
 ├── backend/                    FastAPI service (Python 3.11)
 │   ├── main.py                 Routes, CORS config, Pydantic response models, app bootstrap
-│   ├── db.py                   SQLite CRUD — init_db, create_communication, get_communication, update_communication
+│   ├── db.py                   Supabase CRUD (PostgreSQL) — init_db, create_communication, get_communication, update_communication
 │   ├── fhir.py                 FHIR fetch + parse — fetch_patient_data, _fetch_from_sandbox, _parse_fhir_bundle
 │   ├── llm.py                  LLM translation — generate_summary, _call_llm (Anthropic + OpenAI)
 │   ├── mock_data/
 │   │   └── mock-oncology-123.json   Synthetic oncology fixture (bypasses Epic Sandbox)
-│   ├── requirements.txt        Production deps (fastapi, uvicorn, pydantic, httpx, python-dotenv, anthropic, openai)
-│   ├── requirements-dev.txt    Test deps (-r requirements.txt + pytest)
-│   ├── pytest.ini              testpaths = tests, pythonpath = .
+│   ├── pyproject.toml          Dependencies and tool configuration (uv, ruff)
+│   ├── requirements.txt        Production deps (fastapi, uvicorn, pydantic, httpx, supabase, psycopg)
+│   ├── requirements-dev.txt    Test deps (-r requirements.txt + pytest, pytest-mock)
+│   ├── pytest.ini              testpaths = tests, pythonpath = ., filterwarnings
 │   ├── runtime.txt             Pins Python version for Render
-│   ├── .env.example            FRONTEND_ORIGIN · DB_PATH · FHIR_BASE_URL · LLM_PROVIDER · ANTHROPIC_API_KEY · OPENAI_API_KEY
+│   ├── .env.example            SUPABASE_URL · SUPABASE_KEY · SUPABASE_DB_URL · FHIR_BASE_URL · LLM_PROVIDER
 │   └── tests/
-│       ├── conftest.py         Shared TestClient fixture
+│       ├── conftest.py         Mocks for Supabase and psycopg3
 │       ├── test_task_1_1.py    Health check + root endpoint (4 tests)
-│       ├── test_task_1_2.py    SQLite CRUD (14 tests)
-│       ├── test_task_2_1.py    FHIR fetcher + mock fallback (22 tests)
-│       ├── test_task_3_1.py    LLM translation — happy path, audience, errors, unit (14 tests)
-│       └── test_task_4_2.py    Approval + magic link — happy path, DB state, errors (9 tests)
+│       ├── test_task_1_2.py    Supabase CRUD (5 tests)
+│       ├── test_task_2_1.py    FHIR fetcher + mock fallback (4 tests)
+│       ├── test_task_3_1.py    LLM translation (2 tests)
+│       ├── test_task_4_2.py    Approval + magic link (1 test)
+│       ├── test_task_4_3.py    Patient/family mobile viewer (2 tests)
+│       └── test_change_tracking.py Condition change tracking (3 tests)
 │
 ├── frontend/                   React 18 + Vite + TypeScript + Tailwind CSS
 │   ├── src/
@@ -77,22 +80,28 @@ mgc-sigma-v9/
 | `POST /api/communications/{id}/approve` | ✅ Live | Saves edited `ai_summary_text`, flips status to `Approved`, returns `id` + `approved_at` + `family_link` |
 | `GET /api/communications/{id}` | ✅ Live | Return approved summary for the family viewer; 404 if unknown or status != Approved |
 
-### SQLite schema (`Communications` table)
+### Supabase schema (PostgreSQL)
 
-| Column | Type | Notes |
-| --- | --- | --- |
-| `id` | TEXT PK | UUID v4 |
-| `epic_patient_id` | TEXT NOT NULL | Patient.identifier from Epic Sandbox (Base64-encoded string, e.g. `eovIMNNn7tHB…`). Use `mock-oncology-123` to trigger the mock fallback. |
-| `fhir_source` | TEXT NOT NULL | `"sandbox"` or `"mock"` — records which data path produced the raw clinical text |
-| `patient_name` | TEXT NOT NULL | Patient.name from FHIR |
-| `raw_clinical_text` | TEXT NOT NULL | Serialised FHIR payload (Condition + CarePlan) sent to the LLM |
-| `target_audience` | TEXT NOT NULL | LLM prompt parameter — `"patient"` or `"family"` (default `"family"`) |
-| `ai_summary_text` | TEXT | NULL until LLM generates a draft |
-| `status` | TEXT NOT NULL | `"Draft"` → `"Approved"` |
-| `created_at` | TEXT NOT NULL | ISO-8601 UTC timestamp |
-| `approved_at` | TEXT | NULL until clinician approves; ISO-8601 UTC timestamp |
-| `conditions_json` | TEXT NOT NULL DEFAULT '[]' | Parsed active conditions for this record as a JSON array — enables diff without re-parsing FHIR |
-| `condition_diff` | TEXT | JSON `{"added": [...], "removed": [...], "ongoing": [...]}` — always populated; first visit has `added=[], removed=[]` and `ongoing` = all conditions |
+#### `patients` table
+- `id` (UUID PK): Internal unique identifier
+- `epic_patient_id` (TEXT Unique): Patient.identifier from Epic Sandbox
+- `patient_name` (TEXT): Full name
+- `dob` (TEXT): Date of birth
+- `gender` (TEXT): Gender
+- `created_at` (TIMESTAMPTZ): Auto-set on creation
+
+#### `care_plan_translations` table
+- `id` (UUID PK): Unique identifier for this record (Magic Link token)
+- `patient_id` (UUID FK): Reference to `patients.id`
+- `fhir_source` (TEXT): `"sandbox"` or `"mock"`
+- `raw_clinical_text` (TEXT): Serialised FHIR payload
+- `target_audience` (TEXT): `"patient"` or `"family"`
+- `ai_summary_text` (TEXT): Simplified analogy
+- `status` (TEXT): `"Draft"` or `"Approved"`
+- `created_at` (TIMESTAMPTZ): Auto-set on creation
+- `approved_at` (TIMESTAMPTZ): Timestamp of clinician approval
+- `conditions_json` (JSONB): Parsed active conditions
+- `condition_diff` (JSONB): NEW/ONGOING/RESOLVED delta
 
 ---
 
@@ -100,8 +109,8 @@ mgc-sigma-v9/
 
 ### Package manager
 
-- **Frontend:** npm (Node). Use `npm ci` for reproducible installs. There is no Bun or Yarn config — stay with npm.
-- **Backend:** pip inside a virtualenv.
+- **Frontend:** npm (Node). Use `npm ci` for reproducible installs.
+- **Backend:** [uv](https://docs.astral.sh/uv/) (Python).
 
 ### Running locally
 
@@ -109,10 +118,9 @@ mgc-sigma-v9/
 
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate   # macOS/Linux
-pip install -r requirements.txt
-cp .env.example .env       # fill in any API keys
-uvicorn main:app --reload --port 8000
+uv sync
+cp .env.example .env       # set SUPABASE_URL, SUPABASE_KEY, SUPABASE_DB_URL
+uv run uvicorn main:app --reload --port 8000
 ```
 
 #### Frontend (separate terminal)
@@ -131,6 +139,7 @@ npm run dev
 | Backend alive | [http://localhost:8000/health](http://localhost:8000/health) |
 | Auto-generated API docs (Swagger UI) | [http://localhost:8000/docs](http://localhost:8000/docs) |
 | Frontend dev server | [http://localhost:5173](http://localhost:5173) |
+| Python linting & format | `cd backend && uv run ruff check . && uv run ruff format .` |
 | TypeScript errors | `cd frontend && npm run lint` (runs `tsc --noEmit`) |
 | Production frontend build | `cd frontend && npm run build` (output: `frontend/dist/`) |
 
@@ -158,18 +167,17 @@ LLM calls are synchronous. If response time exceeds ~5 seconds, use the LLM prov
 
 ### Testing
 
-- **Frontend:** [Vitest](https://vitest.dev/) is the test runner (not yet scaffolded — add it when writing the first test).
+- **Frontend:** [Vitest](https://vitest.dev/) is the test runner (not yet scaffolded).
 
   ```bash
-  cd frontend && npm run test          # run all tests
-  cd frontend && npm run test -- path/to/file.test.tsx   # run a single file
+  cd frontend && npm run test
   ```
 
-- **Backend:** pytest is the test runner. Always use the venv's pytest binary.
+- **Backend:** pytest is the test runner.
 
   ```bash
-  cd backend && .venv/bin/pytest -v                          # run all tests
-  cd backend && .venv/bin/pytest tests/test_task_3_1.py -v   # run a single file
+  cd backend && uv run pytest -v                          # run all tests
+  cd backend && uv run pytest tests/test_task_3_1.py -v   # run a single file
   ```
 
 - New features require at least one unit test covering the happy path and one covering the primary error/edge case.

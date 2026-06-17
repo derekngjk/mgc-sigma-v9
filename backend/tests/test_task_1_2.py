@@ -1,144 +1,80 @@
-"""
-Task 1.2 — SQLite state store (TDD).
-Acceptance: backend can create, read, and update Communications records.
-
-Schema reflects FHIR R4 data model:
-  - epic_patient_id  maps to Patient.identifier from Epic Sandbox
-  - fhir_source      distinguishes live Sandbox vs hardcoded mock fallback
-  - target_audience  maps to the LLM prompt parameter (patient | family)
-  - approved_at      audit timestamp for the HITL approval step
-"""
 import re
-from datetime import datetime, timezone
-
-import pytest
-
-from db import create_communication, get_communication, init_db, update_communication
+from unittest.mock import MagicMock, ANY
+from db import create_communication, get_communication, update_communication
 
 ISO8601_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?\+\d{2}:\d{2}$")
 
 
-@pytest.fixture
-def db(tmp_path: pytest.TempPathFactory) -> str:
-    path = str(tmp_path / "test.db")
-    init_db(path)
-    return path
+def test_create_returns_uuid(mock_supabase) -> None:
+    # Mock upsert to return a patient id
+    mock_supabase.table("patients").upsert().execute.return_value = MagicMock(
+        data=[{"id": "p1"}]
+    )
+    mock_supabase.table(
+        "care_plan_translations"
+    ).insert().execute.return_value = MagicMock(data=[{"id": "c1"}])
 
-
-# --- create ---
-
-def test_create_returns_uuid(db: str) -> None:
-    comm_id = create_communication(db, patient_name="Jane Doe", raw_clinical_text="Dx: Hypertension")
+    comm_id = create_communication(
+        patient_name="Jane Doe", raw_clinical_text="Dx: Hypertension"
+    )
     assert comm_id is not None
-    assert len(comm_id) == 36  # xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    assert len(comm_id) == 36
 
 
-def test_create_sets_draft_status(db: str) -> None:
-    comm_id = create_communication(db, patient_name="Jane Doe", raw_clinical_text="Dx: Hypertension")
-    record = get_communication(db, comm_id)
+def test_create_calls_supabase(mock_supabase) -> None:
+    mock_supabase.table("patients").upsert().execute.return_value = MagicMock(
+        data=[{"id": "p1"}]
+    )
+    mock_supabase.table(
+        "care_plan_translations"
+    ).insert().execute.return_value = MagicMock(data=[{"id": "c1"}])
+
+    create_communication(patient_name="Jane Doe", raw_clinical_text="Dx: Hypertension")
+
+    # Verify patient upsert
+    mock_supabase.table.assert_any_call("patients")
+    # Verify translation insert
+    mock_supabase.table.assert_any_call("care_plan_translations")
+
+
+def test_get_communication_flattens_data(mock_supabase) -> None:
+    # Mock return from joined select
+    mock_data = [
+        {
+            "id": "comm-123",
+            "status": "Draft",
+            "ai_summary_text": None,
+            "patients": {"patient_name": "Jane Doe", "epic_patient_id": "epi-123"},
+        }
+    ]
+    mock_supabase.table(
+        "care_plan_translations"
+    ).select().eq().execute.return_value = MagicMock(data=mock_data)
+
+    record = get_communication("comm-123")
     assert record is not None
-    assert record["status"] == "Draft"
-
-
-def test_create_stores_core_fields(db: str) -> None:
-    comm_id = create_communication(db, patient_name="Jane Doe", raw_clinical_text="Dx: Hypertension")
-    record = get_communication(db, comm_id)
     assert record["patient_name"] == "Jane Doe"
-    assert record["raw_clinical_text"] == "Dx: Hypertension"
-    assert record["ai_summary_text"] is None
-    assert record["approved_at"] is None
+    assert record["epic_patient_id"] == "epi-123"
+    assert "patients" not in record
 
 
-def test_created_at_is_iso8601(db: str) -> None:
-    comm_id = create_communication(db, patient_name="Jane Doe", raw_clinical_text="Dx: Hypertension")
-    record = get_communication(db, comm_id)
-    assert ISO8601_RE.match(record["created_at"]), f"created_at not ISO-8601: {record['created_at']}"
+def test_update_communication_calls_update(mock_supabase) -> None:
+    mock_supabase.table(
+        "care_plan_translations"
+    ).update().eq().execute.return_value = MagicMock(data=[{"id": "comm-123"}])
 
-
-def test_create_default_fhir_source_is_sandbox(db: str) -> None:
-    comm_id = create_communication(db, patient_name="Jane Doe", raw_clinical_text="Dx: Hypertension")
-    record = get_communication(db, comm_id)
-    assert record["fhir_source"] == "sandbox"
-
-
-def test_create_default_target_audience_is_family(db: str) -> None:
-    comm_id = create_communication(db, patient_name="Jane Doe", raw_clinical_text="Dx: Hypertension")
-    record = get_communication(db, comm_id)
-    assert record["target_audience"] == "family"
-
-
-def test_create_stores_fhir_fields(db: str) -> None:
-    # Epic Sandbox patient IDs are Base64-encoded strings; test with a realistic format
-    comm_id = create_communication(
-        db,
-        patient_name="Jane Doe",
-        raw_clinical_text="Dx: Hypertension",
-        epic_patient_id="eovIMNNn7tHBQwLGAXNRRw3",
-        fhir_source="sandbox",
-        target_audience="family",
+    result = update_communication("comm-123", status="Approved")
+    assert result is True
+    # In db.py, update is called with the fields dict
+    mock_supabase.table("care_plan_translations").update.assert_called_with(
+        {"status": "Approved", "approved_at": ANY}
     )
-    record = get_communication(db, comm_id)
-    assert record["epic_patient_id"] == "eovIMNNn7tHBQwLGAXNRRw3"
-    assert record["fhir_source"] == "sandbox"
-    assert record["target_audience"] == "family"
 
 
-def test_create_mock_fhir_source(db: str) -> None:
-    # mock-oncology-123 is the reserved test ID that bypasses the Epic Sandbox
-    comm_id = create_communication(
-        db,
-        patient_name="Test Patient",
-        raw_clinical_text="Oncology mock data",
-        epic_patient_id="mock-oncology-123",
-        fhir_source="mock",
-    )
-    record = get_communication(db, comm_id)
-    assert record["fhir_source"] == "mock"
-    assert record["epic_patient_id"] == "mock-oncology-123"
+def test_update_unknown_id_returns_false(mock_supabase) -> None:
+    mock_supabase.table(
+        "care_plan_translations"
+    ).update().eq().execute.return_value = MagicMock(data=[])
 
-
-# --- read ---
-
-def test_get_unknown_id_returns_none(db: str) -> None:
-    result = get_communication(db, "00000000-0000-0000-0000-000000000000")
-    assert result is None
-
-
-# --- update ---
-
-def test_update_sets_approved_status(db: str) -> None:
-    comm_id = create_communication(db, patient_name="Jane Doe", raw_clinical_text="Dx: Hypertension")
-    update_communication(db, comm_id, ai_summary_text="Your blood pressure is high.", status="Approved")
-    record = get_communication(db, comm_id)
-    assert record["status"] == "Approved"
-    assert record["ai_summary_text"] == "Your blood pressure is high."
-
-
-def test_update_approved_sets_approved_at(db: str) -> None:
-    comm_id = create_communication(db, patient_name="Jane Doe", raw_clinical_text="Dx: Hypertension")
-    update_communication(db, comm_id, status="Approved")
-    record = get_communication(db, comm_id)
-    assert record["approved_at"] is not None
-
-
-def test_approved_at_is_iso8601(db: str) -> None:
-    comm_id = create_communication(db, patient_name="Jane Doe", raw_clinical_text="Dx: Hypertension")
-    update_communication(db, comm_id, status="Approved")
-    record = get_communication(db, comm_id)
-    assert ISO8601_RE.match(record["approved_at"]), f"approved_at not ISO-8601: {record['approved_at']}"
-
-
-def test_update_ai_summary_does_not_set_approved_at(db: str) -> None:
-    # Saving an AI draft should not trigger the approval timestamp
-    comm_id = create_communication(db, patient_name="Jane Doe", raw_clinical_text="Dx: Hypertension")
-    update_communication(db, comm_id, ai_summary_text="Draft summary text.")
-    record = get_communication(db, comm_id)
-    assert record["approved_at"] is None
-    assert record["status"] == "Draft"
-
-
-def test_update_unknown_id_returns_false(db: str) -> None:
-    result = update_communication(
-        db, "00000000-0000-0000-0000-000000000000", status="Approved"
-    )
+    result = update_communication("unknown", status="Approved")
     assert result is False

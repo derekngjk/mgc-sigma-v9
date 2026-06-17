@@ -14,6 +14,7 @@ MOCK_DATA_DIR: Path = Path(__file__).parent / "mock_data"
 
 # ── exceptions ────────────────────────────────────────────────────────────────
 
+
 class FHIRError(Exception):
     """Raised when an upstream FHIR call fails or returns unexpected data."""
 
@@ -23,6 +24,7 @@ class PatientNotFoundError(FHIRError):
 
 
 # ── public API ────────────────────────────────────────────────────────────────
+
 
 def fetch_patient_data(epic_patient_id: str) -> dict[str, Any]:
     """Entry point for the route handler.
@@ -66,6 +68,7 @@ def load_mock_patient(patient_id: str = "mock-oncology-123") -> dict[str, Any]:
 
 # ── internal helpers ──────────────────────────────────────────────────────────
 
+
 def _fetch_from_sandbox(epic_patient_id: str) -> dict[str, Any]:
     """Make three synchronous FHIR R4 calls and return the raw parsed JSON bundle."""
     base = FHIR_BASE_URL.rstrip("/")
@@ -74,7 +77,9 @@ def _fetch_from_sandbox(epic_patient_id: str) -> dict[str, Any]:
         with httpx.Client(timeout=timeout) as client:
             patient_resp = client.get(f"{base}/Patient/{epic_patient_id}")
             if patient_resp.status_code == 404:
-                raise PatientNotFoundError(f"Patient {epic_patient_id!r} not found in FHIR sandbox")
+                raise PatientNotFoundError(
+                    f"Patient {epic_patient_id!r} not found in FHIR sandbox"
+                )
             if patient_resp.status_code != 200:
                 raise FHIRError(f"Patient.Read returned {patient_resp.status_code}")
 
@@ -83,14 +88,18 @@ def _fetch_from_sandbox(epic_patient_id: str) -> dict[str, Any]:
                 params={"patient": epic_patient_id, "clinical-status": "active"},
             )
             if condition_resp.status_code != 200:
-                raise FHIRError(f"Condition.Search returned {condition_resp.status_code}")
+                raise FHIRError(
+                    f"Condition.Search returned {condition_resp.status_code}"
+                )
 
             care_plan_resp = client.get(
                 f"{base}/CarePlan",
                 params={"patient": epic_patient_id, "status": "active"},
             )
             if care_plan_resp.status_code != 200:
-                raise FHIRError(f"CarePlan.Search returned {care_plan_resp.status_code}")
+                raise FHIRError(
+                    f"CarePlan.Search returned {care_plan_resp.status_code}"
+                )
 
     except (httpx.TimeoutException, httpx.NetworkError) as exc:
         raise FHIRError(f"FHIR sandbox unreachable: {exc}") from exc
@@ -136,4 +145,9 @@ def _parse_fhir_bundle(raw: dict[str, Any]) -> dict[str, Any]:
         if display:
             conditions.append(display)
 
-    return {"patient_name": patient_name, "dob": dob, "gender": gender, "conditions": conditions}
+    return {
+        "patient_name": patient_name,
+        "dob": dob,
+        "gender": gender,
+        "conditions": conditions,
+    }

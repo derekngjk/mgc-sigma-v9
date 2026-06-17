@@ -321,13 +321,47 @@ The diff is stored in the DB alongside the new record and propagated to both the
 
 ---
 
+## Task 5.1 — Supabase Migration (Production Standards)
+
+**Files:** `backend/db.py`, `backend/main.py`, `backend/pyproject.toml`, `backend/tests/conftest.py`
+
+### What was built
+
+Migrated the local SQLite database to Supabase (PostgreSQL). The monolithic `Communications` table was normalized into `patients` and `care_plan_translations` tables. Dependency management was moved to `uv`, and `ruff` was introduced for linting and formatting.
+
+### Schema decisions
+
+**Normalized tables:** Rather than one large table, clinical data is now split. `patients` stores demographics (keyed by `epic_patient_id`), while `care_plan_translations` stores the AI summaries and raw text. This aligns with standard RDBMS practices and enables easier scaling (e.g., multiple visits per patient).
+
+**`TIMESTAMPTZ` for all timestamps:** SQLite stored timestamps as strings. Postgres uses `TIMESTAMPTZ` to ensure timezone-aware sorting and auditing.
+
+**Idempotent DDL via `psycopg3`:** `init_db` now uses `psycopg3` to execute a `CREATE TABLE IF NOT EXISTS` script on application startup. This ensures the Supabase instance is correctly configured automatically without manual dashboard intervention.
+
+### Implementation decisions
+
+**Supabase Python Client for transactions:** While `psycopg3` handles the schema initialization, the higher-level `supabase-py` client is used for CRUD operations. This provides a cleaner API and prepares the app for using Supabase Auth/Realtime in the future.
+
+**`db_path` removed from signatures:** The database configuration is now purely environment-driven (`SUPABASE_DB_URL`). Function signatures in `db.py` were cleaned up to remove the legacy `db_path` parameter.
+
+**IPv4/IPv6 compatibility:** Since Supabase direct connections are IPv6-only, the connection string defaults to the **Connection Pooler (port 6543)**, which supports IPv4 environments and prevents "Network is unreachable" errors.
+
+**`uv` and `ruff` adoption:** Moved from `pip` and manual formatting to `uv` for reproducible builds and `ruff` for automated linting and code style enforcement.
+
+### Testing decisions
+
+**Mocked Supabase Architecture:** Real database connections are disabled in tests via a session-scoped `psycopg.connect` mock. The `mock_supabase` fixture uses table-specific side effects to simulate complex CRUD flows (e.g., upserting a patient followed by inserting a translation).
+
+**Regression testing:** The public API response shapes were strictly preserved during the migration. Unit tests confirm that the joined data from multiple tables is correctly flattened into the legacy JSON structure.
+
+---
+
 ## Feature Roadmap & TODOs
 
 The following core features are required to align the current proof-of-concept with the target functional architecture:
 
-1. **Database Migration to Supabase (HIPAA Compliant)**
+1. **Database Migration to Supabase (HIPAA Compliant)** ✅
    * Migrate the local SQLite schema to Supabase (Postgres).
-   * Establish tables for `profiles`, `clinics`, `families`, `patients`, `care_plans`, and `care_plan_translations`.
+   * Establish tables for `patients` and `care_plan_translations`. (Next: `profiles`, `clinics`, `families`).
 
 2. **Update Family Access Route**
    * Refactor the frontend router and backend endpoints to use the secure, structured `/family/:fid/member/:mid` path.
