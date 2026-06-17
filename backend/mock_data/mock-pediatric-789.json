@@ -2,16 +2,36 @@
   "patient": {
     "resourceType": "Patient",
     "id": "mock-pediatric-789",
+    "identifier": [
+      {
+        "use": "official",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+              "code": "BCT",
+              "display": "Birth Certificate"
+            }
+          ]
+        },
+        "system": "https://www.ica.gov.sg/BCN",
+        "value": "T1712345E"
+      }
+    ],
     "name": [
       {
         "use": "official",
-        "text": "Lily Chen",
+        "text": "Chen Mei Xin",
         "family": "Chen",
-        "given": ["Lily"]
+        "given": ["Mei Xin"]
       }
     ],
     "birthDate": "2017-02-19",
-    "gender": "female"
+    "gender": "female",
+    "managingOrganization": {
+      "reference": "Organization/KKH",
+      "display": "KK Women's and Children's Hospital"
+    }
   },
   "conditions": {
     "resourceType": "Bundle",
@@ -20,36 +40,153 @@
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "subject": { "reference": "Patient/mock-pediatric-789", "display": "Chen Mei Xin" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Acute lymphoblastic leukaemia, B-cell precursor" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "91861009",
+                "display": "Acute lymphoblastic leukaemia, B-cell precursor"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "C91.0",
+                "display": "Acute lymphoblastic leukaemia"
+              }
+            ],
             "text": "Acute lymphoblastic leukaemia, B-cell precursor"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "Standard risk. Completed induction and consolidation. Currently in maintenance phase (month 14 of 24)." }]
         }
       },
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "subject": { "reference": "Patient/mock-pediatric-789", "display": "Chen Mei Xin" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Neutropenia" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "165517008",
+                "display": "Neutropenia"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "D70.1",
+                "display": "Agranulocytosis secondary to cancer chemotherapy"
+              }
+            ],
             "text": "Neutropenia"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "ANC 0.8 x10^9/L at last count. Prophylactic co-trimoxazole and antifungal in place. Fever precautions reviewed with family." }]
         }
       },
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "resolved" }] },
+          "subject": { "reference": "Patient/mock-pediatric-789", "display": "Chen Mei Xin" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "resolved",
+                "display": "Resolved"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Mucositis" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "45913009",
+                "display": "Mucositis"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "K12.30",
+                "display": "Oral mucositis (ulcerative), unspecified"
+              }
+            ],
             "text": "Mucositis"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "Grade 2 mucositis during consolidation phase. Resolved." }]
         }
       }
@@ -62,9 +199,15 @@
       {
         "resource": {
           "resourceType": "CarePlan",
+          "subject": { "reference": "Patient/mock-pediatric-789", "display": "Chen Mei Xin" },
           "status": "active",
+          "intent": "plan",
           "title": "ALL Maintenance Chemotherapy Plan",
           "description": "Continuation of standard-risk ALL maintenance per COG AALL0434 protocol. Oral 6-mercaptopurine daily and weekly methotrexate. Monthly clinic visits for CBC and toxicity review.",
+          "author": {
+            "reference": "Organization/KKH",
+            "display": "KK Women's and Children's Hospital"
+          },
           "activity": [
             { "detail": { "description": "Oral 6-mercaptopurine 75 mg/m² daily (evening, fasting)" } },
             { "detail": { "description": "Weekly oral methotrexate 20 mg/m²" } },

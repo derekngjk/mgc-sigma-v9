@@ -2,16 +2,36 @@
   "patient": {
     "resourceType": "Patient",
     "id": "mock-neurology-101",
+    "identifier": [
+      {
+        "use": "official",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+              "code": "NRIC",
+              "display": "National Registration Identity Card"
+            }
+          ]
+        },
+        "system": "https://www.moh.gov.sg/NRIC",
+        "value": "S8245678D"
+      }
+    ],
     "name": [
       {
         "use": "official",
-        "text": "Amara Osei",
-        "family": "Osei",
-        "given": ["Amara"]
+        "text": "Priya d/o Krishnan",
+        "family": "Krishnan",
+        "given": ["Priya"]
       }
     ],
     "birthDate": "1982-11-07",
-    "gender": "female"
+    "gender": "female",
+    "managingOrganization": {
+      "reference": "Organization/NNI",
+      "display": "National Neuroscience Institute"
+    }
   },
   "conditions": {
     "resourceType": "Bundle",
@@ -20,48 +40,204 @@
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "subject": { "reference": "Patient/mock-neurology-101", "display": "Priya d/o Krishnan" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Relapsing-remitting multiple sclerosis" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "26889001",
+                "display": "Relapsing-remitting multiple sclerosis"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "G35",
+                "display": "Multiple sclerosis"
+              }
+            ],
             "text": "Relapsing-remitting multiple sclerosis"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "Diagnosed 6 years ago. Two relapses in the past 3 years. Currently on natalizumab (Tysabri) IV infusion every 4 weeks. JC virus antibody positive — risk stratification ongoing." }]
         }
       },
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "subject": { "reference": "Patient/mock-neurology-101", "display": "Priya d/o Krishnan" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "MS-related fatigue syndrome" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "84229001",
+                "display": "MS-related fatigue syndrome"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "R53.83",
+                "display": "Other fatigue"
+              }
+            ],
             "text": "MS-related fatigue syndrome"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "Fatigue Impact Scale score 62/84. Managed with amantadine and structured rest periods. Occupational therapy referral in place." }]
         }
       },
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "subject": { "reference": "Patient/mock-neurology-101", "display": "Priya d/o Krishnan" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Neurogenic bladder dysfunction" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "39445007",
+                "display": "Neurogenic bladder dysfunction"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "N31.9",
+                "display": "Neuromuscular dysfunction of bladder, unspecified"
+              }
+            ],
             "text": "Neurogenic bladder dysfunction"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "Urinary urgency and incomplete emptying. Managed with solifenacin 5mg daily and timed voiding schedule. Urology review every 6 months." }]
         }
       },
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "resolved" }] },
+          "subject": { "reference": "Patient/mock-neurology-101", "display": "Priya d/o Krishnan" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "resolved",
+                "display": "Resolved"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Optic neuritis, left eye" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "16063008",
+                "display": "Optic neuritis, left eye"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "H46.10",
+                "display": "Retrobulbar neuritis, unspecified eye"
+              }
+            ],
             "text": "Optic neuritis, left eye"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "Presenting symptom at diagnosis. Treated with IV methylprednisolone. Vision recovered to near-baseline." }]
         }
       }
@@ -74,9 +250,15 @@
       {
         "resource": {
           "resourceType": "CarePlan",
+          "subject": { "reference": "Patient/mock-neurology-101", "display": "Priya d/o Krishnan" },
           "status": "active",
+          "intent": "plan",
           "title": "MS Disease-Modifying Therapy and Symptom Management Plan",
           "description": "Continuation of natalizumab therapy with quarterly MRI surveillance and annual JC virus antibody index monitoring. Symptom management for fatigue and bladder dysfunction. Physiotherapy and occupational therapy support.",
+          "author": {
+            "reference": "Organization/NNI",
+            "display": "National Neuroscience Institute"
+          },
           "activity": [
             { "detail": { "description": "Natalizumab 300mg IV infusion every 4 weeks — next infusion in 3 weeks" } },
             { "detail": { "description": "Brain and spinal cord MRI with contrast every 6 months — surveillance for new lesions or PML" } },

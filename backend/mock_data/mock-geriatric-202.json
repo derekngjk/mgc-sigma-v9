@@ -2,16 +2,36 @@
   "patient": {
     "resourceType": "Patient",
     "id": "mock-geriatric-202",
+    "identifier": [
+      {
+        "use": "official",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+              "code": "NRIC",
+              "display": "National Registration Identity Card"
+            }
+          ]
+        },
+        "system": "https://www.moh.gov.sg/NRIC",
+        "value": "S4734567C"
+      }
+    ],
     "name": [
       {
         "use": "official",
-        "text": "Robert Kim",
-        "family": "Kim",
-        "given": ["Robert"]
+        "text": "Goh Swee Huat",
+        "family": "Goh",
+        "given": ["Swee Huat"]
       }
     ],
     "birthDate": "1947-03-22",
-    "gender": "male"
+    "gender": "male",
+    "managingOrganization": {
+      "reference": "Organization/NUH",
+      "display": "National University Hospital"
+    }
   },
   "conditions": {
     "resourceType": "Bundle",
@@ -20,60 +40,255 @@
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "subject": { "reference": "Patient/mock-geriatric-202", "display": "Goh Swee Huat" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Moderate Alzheimer's disease" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "416780008",
+                "display": "Moderate Alzheimer's disease"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "G30.9",
+                "display": "Alzheimer's disease, unspecified"
+              }
+            ],
             "text": "Moderate Alzheimer's disease"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
-          "note": [{ "text": "MMSE 16/30 at last assessment. Requires assistance with instrumental ADLs. Lives with daughter. On donepezil 10mg and memantine 20mg daily. Behavioural symptoms (sundowning) managed with structured routines." }]
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
+          "note": [{ "text": "MMSE 16/30 at last assessment. Requires assistance with instrumental ADLs. Lives with son. On donepezil 10mg and memantine 20mg daily. Behavioural symptoms (sundowning) managed with structured routines." }]
         }
       },
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "subject": { "reference": "Patient/mock-geriatric-202", "display": "Goh Swee Huat" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Atrial fibrillation, persistent" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "440028005",
+                "display": "Atrial fibrillation, persistent"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "I48.11",
+                "display": "Longstanding persistent atrial fibrillation"
+              }
+            ],
             "text": "Atrial fibrillation, persistent"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "CHA₂DS₂-VASc score 5. On apixaban 2.5mg BD for stroke prevention. Rate controlled with bisoprolol 5mg daily. Last ECG confirmed persistent AF." }]
         }
       },
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "subject": { "reference": "Patient/mock-geriatric-202", "display": "Goh Swee Huat" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Osteoporosis with history of vertebral compression fracture" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "64859006",
+                "display": "Osteoporosis with history of vertebral compression fracture"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "M80.08",
+                "display": "Age-related osteoporosis with current pathological fracture, vertebra"
+              }
+            ],
             "text": "Osteoporosis with history of vertebral compression fracture"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "T-score -3.1 lumbar spine. T12 compression fracture 8 months ago. On alendronate 70mg weekly, calcium 1200mg and vitamin D3 1000IU daily." }]
         }
       },
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "subject": { "reference": "Patient/mock-geriatric-202", "display": "Goh Swee Huat" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Benign prostatic hyperplasia" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "266569009",
+                "display": "Benign prostatic hyperplasia"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "N40.1",
+                "display": "Benign prostatic hyperplasia with lower urinary tract symptoms"
+              }
+            ],
             "text": "Benign prostatic hyperplasia"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "IPSS 18 (moderate). On tamsulosin 0.4mg daily. Urology review every 12 months." }]
         }
       },
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "resolved" }] },
+          "subject": { "reference": "Patient/mock-geriatric-202", "display": "Goh Swee Huat" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "resolved",
+                "display": "Resolved"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Urinary tract infection" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "68566005",
+                "display": "Urinary tract infection"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "N39.0",
+                "display": "Urinary tract infection, site not specified"
+              }
+            ],
             "text": "Urinary tract infection"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "E. coli UTI treated with trimethoprim 5 weeks ago. Resolved. Contributed to acute delirium episode — now cleared." }]
         }
       }
@@ -86,15 +301,21 @@
       {
         "resource": {
           "resourceType": "CarePlan",
+          "subject": { "reference": "Patient/mock-geriatric-202", "display": "Goh Swee Huat" },
           "status": "active",
+          "intent": "plan",
           "title": "Geriatric Multi-Morbidity Management and Carer Support Plan",
           "description": "Coordinated management of Alzheimer's disease, atrial fibrillation, and osteoporosis with emphasis on fall prevention, anticoagulation safety, and carer education. Memory clinic and geriatrics co-managing.",
+          "author": {
+            "reference": "Organization/NUH",
+            "display": "National University Hospital"
+          },
           "activity": [
             { "detail": { "description": "Memory clinic review every 3 months — cognitive reassessment, medication review, and BPSD management" } },
             { "detail": { "description": "Fall risk assessment and home safety evaluation by occupational therapist — grab rails and stair gate recommended" } },
-            { "detail": { "description": "Anticoagulation review — confirm adherence to apixaban, educate daughter on bleeding signs and missed dose protocol" } },
+            { "detail": { "description": "Anticoagulation review — confirm adherence to apixaban, educate son on bleeding signs and missed dose protocol" } },
             { "detail": { "description": "DEXA scan repeat in 12 months to monitor alendronate response" } },
-            { "detail": { "description": "Carer support referral — local dementia carers group and respite care assessment for daughter" } }
+            { "detail": { "description": "Carer support referral — local dementia carers group and respite care assessment for family" } }
           ],
           "goal": [
             { "display": "Prevent falls and minimise fracture risk" },

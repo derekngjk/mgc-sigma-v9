@@ -2,16 +2,36 @@
   "patient": {
     "resourceType": "Patient",
     "id": "mock-oncology-123",
+    "identifier": [
+      {
+        "use": "official",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+              "code": "NRIC",
+              "display": "National Registration Identity Card"
+            }
+          ]
+        },
+        "system": "https://www.moh.gov.sg/NRIC",
+        "value": "S6712345A"
+      }
+    ],
     "name": [
       {
         "use": "official",
-        "text": "Elena Vasquez",
-        "family": "Vasquez",
-        "given": ["Elena"]
+        "text": "Tan Mei Ling",
+        "family": "Tan",
+        "given": ["Mei Ling"]
       }
     ],
-    "birthDate": "1968-04-15",
-    "gender": "female"
+    "birthDate": "1967-05-23",
+    "gender": "female",
+    "managingOrganization": {
+      "reference": "Organization/NCCS",
+      "display": "National Cancer Centre Singapore"
+    }
   },
   "conditions": {
     "resourceType": "Bundle",
@@ -20,36 +40,153 @@
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "subject": { "reference": "Patient/mock-oncology-123", "display": "Tan Mei Ling" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Invasive ductal carcinoma of left breast, stage III" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "413448000",
+                "display": "Invasive ductal carcinoma of left breast, stage III"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "C50.412",
+                "display": "Malignant neoplasm of lower-outer quadrant of left female breast"
+              }
+            ],
             "text": "Invasive ductal carcinoma of left breast, stage III"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "ER+/PR+, HER2-. Currently receiving neoadjuvant chemotherapy." }]
         }
       },
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "subject": { "reference": "Patient/mock-oncology-123", "display": "Tan Mei Ling" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Chemotherapy-induced nausea and vomiting" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "422587007",
+                "display": "Chemotherapy-induced nausea and vomiting"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "R11.2",
+                "display": "Nausea with vomiting, unspecified"
+              }
+            ],
             "text": "Chemotherapy-induced nausea and vomiting"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "Managed with ondansetron and dexamethasone." }]
         }
       },
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "resolved" }] },
+          "subject": { "reference": "Patient/mock-oncology-123", "display": "Tan Mei Ling" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "resolved",
+                "display": "Resolved"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Iron deficiency anaemia" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "87522002",
+                "display": "Iron deficiency anaemia"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "D50.9",
+                "display": "Iron deficiency anaemia, unspecified"
+              }
+            ],
             "text": "Iron deficiency anaemia"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }]
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ]
         }
       }
     ]
@@ -61,9 +198,15 @@
       {
         "resource": {
           "resourceType": "CarePlan",
+          "subject": { "reference": "Patient/mock-oncology-123", "display": "Tan Mei Ling" },
           "status": "active",
+          "intent": "plan",
           "title": "Breast Cancer Neoadjuvant Treatment Plan",
           "description": "12-week neoadjuvant chemotherapy regimen (ddAC-T) prior to surgical evaluation. Weekly nursing check-ins. Imaging reassessment at week 8.",
+          "author": {
+            "reference": "Organization/NCCS",
+            "display": "National Cancer Centre Singapore"
+          },
           "activity": [
             { "detail": { "description": "Administer doxorubicin + cyclophosphamide IV q2w x 4 cycles" } },
             { "detail": { "description": "Transition to paclitaxel IV weekly x 12 weeks after AC completion" } },

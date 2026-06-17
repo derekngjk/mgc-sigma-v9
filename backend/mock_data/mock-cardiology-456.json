@@ -2,16 +2,36 @@
   "patient": {
     "resourceType": "Patient",
     "id": "mock-cardiology-456",
+    "identifier": [
+      {
+        "use": "official",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+              "code": "NRIC",
+              "display": "National Registration Identity Card"
+            }
+          ]
+        },
+        "system": "https://www.moh.gov.sg/NRIC",
+        "value": "S5712345B"
+      }
+    ],
     "name": [
       {
         "use": "official",
-        "text": "Marcus Thompson",
-        "family": "Thompson",
-        "given": ["Marcus"]
+        "text": "Lim Chong Wei",
+        "family": "Lim",
+        "given": ["Chong Wei"]
       }
     ],
     "birthDate": "1957-09-03",
-    "gender": "male"
+    "gender": "male",
+    "managingOrganization": {
+      "reference": "Organization/TTSH",
+      "display": "Tan Tock Seng Hospital"
+    }
   },
   "conditions": {
     "resourceType": "Bundle",
@@ -20,48 +40,204 @@
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "subject": { "reference": "Patient/mock-cardiology-456", "display": "Lim Chong Wei" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Chronic systolic heart failure, NYHA Class III" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "48447003",
+                "display": "Chronic systolic heart failure, NYHA Class III"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "I50.22",
+                "display": "Chronic systolic (congestive) heart failure"
+              }
+            ],
             "text": "Chronic systolic heart failure, NYHA Class III"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "EF 32%. On sacubitril/valsartan, carvedilol, and spironolactone. Last echo 6 weeks ago." }]
         }
       },
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "subject": { "reference": "Patient/mock-cardiology-456", "display": "Lim Chong Wei" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Type 2 diabetes mellitus" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "44054006",
+                "display": "Type 2 diabetes mellitus"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "E11.9",
+                "display": "Type 2 diabetes mellitus without complications"
+              }
+            ],
             "text": "Type 2 diabetes mellitus"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "HbA1c 7.8% at last check. On metformin 1g BD and empagliflozin 10mg daily." }]
         }
       },
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "active" }] },
+          "subject": { "reference": "Patient/mock-cardiology-456", "display": "Lim Chong Wei" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Hypertension" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "38341003",
+                "display": "Hypertension"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "I10",
+                "display": "Essential (primary) hypertension"
+              }
+            ],
             "text": "Hypertension"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "Controlled on current regimen. Target BP <130/80." }]
         }
       },
       {
         "resource": {
           "resourceType": "Condition",
-          "clinicalStatus": { "coding": [{ "code": "resolved" }] },
+          "subject": { "reference": "Patient/mock-cardiology-456", "display": "Lim Chong Wei" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "resolved",
+                "display": "Resolved"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
           "code": {
-            "coding": [{ "display": "Acute decompensated heart failure" }],
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "413930009",
+                "display": "Acute decompensated heart failure"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "I50.9",
+                "display": "Heart failure, unspecified"
+              }
+            ],
             "text": "Acute decompensated heart failure"
           },
-          "category": [{ "coding": [{ "code": "problem-list-item" }] }],
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
           "note": [{ "text": "Hospitalisation 4 months ago. Resolved with IV diuresis." }]
         }
       }
@@ -74,9 +250,15 @@
       {
         "resource": {
           "resourceType": "CarePlan",
+          "subject": { "reference": "Patient/mock-cardiology-456", "display": "Lim Chong Wei" },
           "status": "active",
+          "intent": "plan",
           "title": "Heart Failure Management Plan",
           "description": "Optimise guideline-directed medical therapy, monitor volume status, and reduce re-hospitalisation risk. Daily weight monitoring and fluid restriction to 1.5 L/day.",
+          "author": {
+            "reference": "Organization/TTSH",
+            "display": "Tan Tock Seng Hospital"
+          },
           "activity": [
             { "detail": { "description": "Daily weight measurement — alert care team if weight increases >2 kg in 2 days" } },
             { "detail": { "description": "Fluid restriction 1.5 L per day including all beverages" } },
