@@ -1,0 +1,286 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 900" width="1480" height="900" font-family="Arial, Helvetica, sans-serif">
+
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#475569"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#b45309"/>
+    </marker>
+    <marker id="arr-async" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#7c3aed"/>
+    </marker>
+    <clipPath id="clip-fe"><rect x="50" y="200" width="240" height="330" rx="8"/></clipPath>
+    <clipPath id="clip-api"><rect x="330" y="200" width="250" height="330" rx="8"/></clipPath>
+    <clipPath id="clip-wrk"><rect x="630" y="326" width="320" height="300" rx="8"/></clipPath>
+    <clipPath id="clip-redis"><rect x="630" y="210" width="160" height="92" rx="8"/></clipPath>
+    <clipPath id="clip-db"><rect x="330" y="560" width="250" height="270" rx="8"/></clipPath>
+    <clipPath id="clip-s3"><rect x="630" y="660" width="250" height="110" rx="8"/></clipPath>
+    <clipPath id="clip-ai"><rect x="990" y="400" width="440" height="156" rx="8"/></clipPath>
+  </defs>
+
+  <!-- ── Background ───────────────────────────────────────────── -->
+  <rect width="1480" height="900" fill="#f1f5f9"/>
+
+  <!-- ── PERSONS ───────────────────────────────────────────────── -->
+  <!-- Clinician -->
+  <rect x="60" y="24" width="210" height="82" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="165" y="44"  text-anchor="middle" font-size="9"  fill="#92400e" font-style="italic">«Person»</text>
+  <text x="165" y="63"  text-anchor="middle" font-size="14" fill="#78350f" font-weight="bold">Clinician</text>
+  <text x="165" y="79"  text-anchor="middle" font-size="9"  fill="#92400e">Authenticated. Reviews / edits AI draft,</text>
+  <text x="165" y="93"  text-anchor="middle" font-size="9"  fill="#92400e">approves, then delivers care plan</text>
+
+  <!-- Patient / Family -->
+  <rect x="1210" y="24" width="210" height="82" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="1315" y="44"  text-anchor="middle" font-size="9"  fill="#92400e" font-style="italic">«Person»</text>
+  <text x="1315" y="63"  text-anchor="middle" font-size="14" fill="#78350f" font-weight="bold">Patient / Family</text>
+  <text x="1315" y="79"  text-anchor="middle" font-size="9"  fill="#92400e">No account. Opens magic link,</text>
+  <text x="1315" y="93"  text-anchor="middle" font-size="9"  fill="#92400e">reads / hears summary in own language</text>
+
+  <!-- ── SYSTEM BOUNDARY ───────────────────────────────────────── -->
+  <rect x="30" y="150" width="1420" height="720" rx="8" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="8,4"/>
+  <text x="740" y="170" text-anchor="middle" font-size="10" fill="#64748b" font-style="italic">Bridge · Production topology · Singapore-pinned · Phase 0 collapses api + worker + beat onto one box via docker-compose</text>
+
+  <!-- ── FRONTEND CONTAINER ────────────────────────────────────── -->
+  <rect x="50" y="200" width="240" height="330" rx="8" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+  <rect x="50" y="200" width="240" height="42" fill="#2563eb" clip-path="url(#clip-fe)"/>
+  <text x="170" y="217" text-anchor="middle" font-size="9"  fill="#bfdbfe" font-style="italic">«Container»</text>
+  <text x="170" y="233" text-anchor="middle" font-size="13" fill="white"   font-weight="bold">Frontend</text>
+  <text x="170" y="256" text-anchor="middle" font-size="8.5" fill="#1d4ed8">[Next.js · App Router · Tailwind v4 · Supabase JS]</text>
+
+  <rect x="64" y="270" width="212" height="106" rx="5" fill="white" stroke="#bfdbfe" stroke-width="1.5"/>
+  <text x="170" y="287" text-anchor="middle" font-size="10" fill="#1e40af" font-weight="bold">/clinician  (authed · AuthGate)</text>
+  <text x="170" y="303" text-anchor="middle" font-size="9"  fill="#374151">Patient picker · FHIR ↔ AI draft</text>
+  <text x="170" y="317" text-anchor="middle" font-size="9"  fill="#374151">Edit → Approve gate (anti-hallucination)</text>
+  <text x="170" y="331" text-anchor="middle" font-size="9"  fill="#374151">Multilingual preview · live job status</text>
+  <text x="170" y="345" text-anchor="middle" font-size="9"  fill="#374151">Deliver: QR / printable link at clinic</text>
+  <text x="170" y="361" text-anchor="middle" font-size="9"  fill="#64748b">Skeleton loader polls job → succeeded</text>
+
+  <rect x="64" y="386" width="212" height="80" rx="5" fill="white" stroke="#bfdbfe" stroke-width="1.5"/>
+  <text x="170" y="403" text-anchor="middle" font-size="10" fill="#1e40af" font-weight="bold">/family/:fid/member/:mid  (public)</text>
+  <text x="170" y="419" text-anchor="middle" font-size="9"  fill="#374151">One member only — never the family</text>
+  <text x="170" y="433" text-anchor="middle" font-size="9"  fill="#374151">Multilingual viewer + audio playback</text>
+  <text x="170" y="447" text-anchor="middle" font-size="9"  fill="#dc2626">404 on unknown / expired / mismatched token</text>
+
+  <text x="170" y="488" text-anchor="middle" font-size="9" fill="#64748b">NEXT_PUBLIC_API_BASE_URL → API</text>
+  <text x="170" y="502" text-anchor="middle" font-size="9" fill="#64748b">Large media direct to S3 (presigned)</text>
+  <text x="170" y="516" text-anchor="middle" font-size="9" fill="#64748b">Deployed: static (Render / Vercel)</text>
+
+  <!-- ── API CONTAINER ─────────────────────────────────────────── -->
+  <rect x="330" y="200" width="250" height="330" rx="8" fill="#1e3a8a" stroke="#3b82f6" stroke-width="2"/>
+  <rect x="330" y="200" width="250" height="42" fill="#1e40af" clip-path="url(#clip-api)"/>
+  <text x="455" y="217" text-anchor="middle" font-size="9"  fill="#93c5fd" font-style="italic">«Container»</text>
+  <text x="455" y="233" text-anchor="middle" font-size="13" fill="white"   font-weight="bold">API Service  (thin)</text>
+  <text x="455" y="256" text-anchor="middle" font-size="8.5" fill="#93c5fd">[FastAPI · Python 3.12 · Pydantic v2 · uvicorn]</text>
+  <text x="455" y="272" text-anchor="middle" font-size="9"  fill="#bfdbfe" font-style="italic">validate → authorize → enqueue</text>
+
+  <rect x="344" y="282" width="222" height="44" rx="4" fill="#1e40af"/>
+  <text x="455" y="299" text-anchor="middle" font-size="10" fill="white"   font-weight="bold">Auth — Supabase JWKS</text>
+  <text x="455" y="315" text-anchor="middle" font-size="9"  fill="#93c5fd">Bearer JWT → CurrentUser · clinic-scoped</text>
+
+  <rect x="344" y="334" width="222" height="60" rx="4" fill="#1e40af"/>
+  <text x="455" y="351" text-anchor="middle" font-size="10" fill="white"   font-weight="bold">Routers  (one per resource)</text>
+  <text x="455" y="366" text-anchor="middle" font-size="9"  fill="#93c5fd">care-plans · patients</text>
+  <text x="455" y="380" text-anchor="middle" font-size="9"  fill="#93c5fd">approve · deliver · /healthz</text>
+
+  <rect x="344" y="402" width="222" height="44" rx="4" fill="#1e40af"/>
+  <text x="455" y="419" text-anchor="middle" font-size="10" fill="white"   font-weight="bold">Repo pattern</text>
+  <text x="455" y="435" text-anchor="middle" font-size="9"  fill="#93c5fd">SupabaseRepo (prod) · InMemoryRepo (tests)</text>
+
+  <text x="455" y="466" text-anchor="middle" font-size="9" fill="#93c5fd">Per-member magic-link capability (opaque UUID)</text>
+  <text x="455" y="480" text-anchor="middle" font-size="9" fill="#64748b">CORS_ORIGINS · X-Request-ID middleware</text>
+  <text x="455" y="494" text-anchor="middle" font-size="9" fill="#64748b">Centralized typed Settings · mock-safe defaults</text>
+  <text x="455" y="514" text-anchor="middle" font-size="9" fill="#bfdbfe" font-style="italic">Same image · ROLE=api</text>
+
+  <!-- ── REDIS ─────────────────────────────────────────────────── -->
+  <rect x="630" y="210" width="160" height="92" rx="8" fill="#fef2f2" stroke="#ef4444" stroke-width="2"/>
+  <rect x="630" y="210" width="160" height="34" fill="#dc2626" clip-path="url(#clip-redis)"/>
+  <text x="710" y="225" text-anchor="middle" font-size="9"  fill="#fecaca" font-style="italic">«Infrastructure»</text>
+  <text x="710" y="239" text-anchor="middle" font-size="12" fill="white"   font-weight="bold">Redis</text>
+  <text x="710" y="261" text-anchor="middle" font-size="9"  fill="#7f1d1d">Broker + result backend</text>
+  <text x="710" y="275" text-anchor="middle" font-size="9"  fill="#7f1d1d">Rate limits · semaphores</text>
+  <text x="710" y="289" text-anchor="middle" font-size="9"  fill="#7f1d1d">Maintenance flag · AOF persist</text>
+
+  <!-- ── WORKERS CONTAINER ─────────────────────────────────────── -->
+  <rect x="630" y="326" width="320" height="300" rx="8" fill="#1e3a8a" stroke="#3b82f6" stroke-width="2"/>
+  <rect x="630" y="326" width="320" height="42" fill="#1e40af" clip-path="url(#clip-wrk)"/>
+  <text x="790" y="343" text-anchor="middle" font-size="9"  fill="#93c5fd" font-style="italic">«Container»</text>
+  <text x="790" y="359" text-anchor="middle" font-size="13" fill="white"   font-weight="bold">Celery Workers</text>
+  <text x="790" y="381" text-anchor="middle" font-size="8.5" fill="#93c5fd">[Celery · Python 3.12 · one queue per stage]</text>
+  <text x="790" y="397" text-anchor="middle" font-size="9"  fill="#bfdbfe" font-style="italic">Pipeline = Celery chain · one job row per step</text>
+
+  <rect x="646" y="403" width="288" height="26" rx="4" fill="#1e40af"/>
+  <text x="790" y="420" text-anchor="middle" font-size="8.5" fill="white">1 · FHIR Fetch — Patient · Condition · CarePlan</text>
+  <rect x="646" y="432" width="288" height="26" rx="4" fill="#0e7490"/>
+  <text x="790" y="449" text-anchor="middle" font-size="8.5" fill="white" font-weight="bold">2 · De-identify — strip NRIC / name / DOB (local)</text>
+  <rect x="646" y="461" width="288" height="26" rx="4" fill="#1e40af"/>
+  <text x="790" y="478" text-anchor="middle" font-size="8.5" fill="white">3 · Generate — LLM empathetic draft</text>
+  <rect x="646" y="490" width="288" height="26" rx="4" fill="#1e40af"/>
+  <text x="790" y="507" text-anchor="middle" font-size="8.5" fill="white">4 · Translate — EN · ZH · MS · TA</text>
+  <rect x="646" y="519" width="288" height="26" rx="4" fill="#1e40af"/>
+  <text x="790" y="536" text-anchor="middle" font-size="8.5" fill="white">5 · Text-to-speech — audio → S3</text>
+  <rect x="646" y="548" width="288" height="26" rx="4" fill="#a21caf"/>
+  <text x="790" y="565" text-anchor="middle" font-size="8.5" fill="white" font-weight="bold">6 · Illustrate — Nano Banana image → S3</text>
+
+  <text x="790" y="588" text-anchor="middle" font-size="8.5" fill="#93c5fd">queued → running → succeeded | failed · watchdog</text>
+  <text x="790" y="600" text-anchor="middle" font-size="8.5" fill="#93c5fd">Deliver = stub (QR / printable link) · fail on fatal</text>
+  <text x="790" y="613" text-anchor="middle" font-size="8.5" fill="#bfdbfe" font-style="italic">Same image · ROLE=worker | beat</text>
+
+  <!-- ── SUPABASE DB ───────────────────────────────────────────── -->
+  <rect x="330" y="560" width="250" height="270" rx="8" fill="#064e3b" stroke="#059669" stroke-width="2"/>
+  <rect x="330" y="560" width="250" height="36" fill="#047857" clip-path="url(#clip-db)"/>
+  <text x="455" y="576" text-anchor="middle" font-size="9"  fill="#6ee7b7" font-style="italic">«Database»</text>
+  <text x="455" y="590" text-anchor="middle" font-size="11" fill="white"   font-weight="bold">Supabase (Postgres · Auth · RLS)</text>
+  <text x="455" y="612" text-anchor="middle" font-size="9" fill="#a7f3d0">profiles · clinics · families  (multi-tenant)</text>
+  <text x="455" y="626" text-anchor="middle" font-size="9" fill="#a7f3d0">patients · care_plans (+ reid_map)</text>
+  <text x="455" y="640" text-anchor="middle" font-size="9" fill="#a7f3d0">care_plan_translations · jobs</text>
+  <text x="455" y="654" text-anchor="middle" font-size="9" fill="#a7f3d0">audit_log — append-only · immutable</text>
+  <text x="455" y="674" text-anchor="middle" font-size="9" fill="#6ee7b7">RLS keyed on clinic_id</text>
+  <text x="455" y="688" text-anchor="middle" font-size="9" fill="#6ee7b7">Member readable by own token · no family aggregate</text>
+  <text x="455" y="708" text-anchor="middle" font-size="9" fill="#fca5a5" font-weight="bold">Singapore region · PDPA / HIB / NEHR</text>
+  <text x="455" y="722" text-anchor="middle" font-size="9" fill="#6ee7b7">reid_map encrypted · never leaves this tier</text>
+  <text x="455" y="742" text-anchor="middle" font-size="9" fill="#6ee7b7">Source of truth for all state</text>
+
+  <!-- ── S3 ────────────────────────────────────────────────────── -->
+  <rect x="630" y="660" width="250" height="110" rx="8" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+  <rect x="630" y="660" width="250" height="34" fill="#c2410c" clip-path="url(#clip-s3)"/>
+  <text x="755" y="675" text-anchor="middle" font-size="9"  fill="#fed7aa" font-style="italic">«Container»</text>
+  <text x="755" y="689" text-anchor="middle" font-size="11" fill="white"   font-weight="bold">Object Storage (S3)</text>
+  <text x="755" y="711" text-anchor="middle" font-size="9" fill="#9a3412">Audio (mp3) · images (Nano Banana) · PDF</text>
+  <text x="755" y="725" text-anchor="middle" font-size="9" fill="#9a3412">Private bucket · presigned PUT / GET</text>
+  <text x="755" y="739" text-anchor="middle" font-size="9" fill="#9a3412">Lifecycle expiry on intermediates</text>
+  <text x="755" y="755" text-anchor="middle" font-size="9" fill="#c2410c">+ CloudFront CDN at scale-up</text>
+
+  <!-- ── EXTERNAL: FHIR / NATIONAL HEALTH DATA ─────────────────── -->
+  <rect x="990" y="200" width="440" height="180" rx="8" fill="#f8fafc" stroke="#9ca3af" stroke-width="2"/>
+  <text x="1210" y="220" text-anchor="middle" font-size="9"  fill="#6b7280" font-style="italic">«External Systems»  ·  reached via FhirProvider interface (mock | real by PROVIDER_MODE)</text>
+  <text x="1210" y="240" text-anchor="middle" font-size="13" fill="#111827" font-weight="bold">FHIR / National Health Data — Singapore</text>
+  <text x="1210" y="256" text-anchor="middle" font-size="9"  fill="#374151">Real: Synapxe NGEMR (Epic) · Mock: mock-oncology-123 fallback</text>
+
+  <rect x="1070" y="266" width="280" height="80" rx="5" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="1210" y="286" text-anchor="middle" font-size="11" fill="#111827" font-weight="bold">Singapore · Epic / Synapxe NGEMR</text>
+  <text x="1210" y="304" text-anchor="middle" font-size="9"  fill="#374151">FHIR R4 · OAuth2</text>
+  <text x="1210" y="320" text-anchor="middle" font-size="9"  fill="#374151">Patient · Condition · CarePlan</text>
+  <text x="1210" y="336" text-anchor="middle" font-size="9"  fill="#374151">NHG / NUHS clusters · NEHR context</text>
+
+  <rect x="1040" y="352" width="340" height="20" rx="4" fill="#fef2f2" stroke="#fca5a5" stroke-width="1"/>
+  <text x="1210" y="366" text-anchor="middle" font-size="9" fill="#b91c1c" font-weight="bold">⚠ PoC: synthetic / sandbox data only · no real PHI</text>
+
+  <!-- ── EXTERNAL: AI SERVICES ─────────────────────────────────── -->
+  <rect x="990" y="400" width="440" height="156" rx="8" fill="#f8fafc" stroke="#9ca3af" stroke-width="2"/>
+  <rect x="990" y="400" width="440" height="36" fill="#e2e8f0" clip-path="url(#clip-ai)"/>
+  <text x="1210" y="416" text-anchor="middle" font-size="9"  fill="#64748b" font-style="italic">«External Systems»</text>
+  <text x="1210" y="430" text-anchor="middle" font-size="12" fill="#111827" font-weight="bold">AI Services  ·  each behind its own provider interface</text>
+
+  <rect x="1000" y="448" width="101" height="94" rx="5" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="1050" y="466" text-anchor="middle" font-size="9.5" fill="#111827" font-weight="bold">LLM</text>
+  <text x="1050" y="483" text-anchor="middle" font-size="8" fill="#374151">Claude /</text>
+  <text x="1050" y="496" text-anchor="middle" font-size="8" fill="#374151">GPT-4o</text>
+  <text x="1050" y="513" text-anchor="middle" font-size="8" fill="#374151">writes the</text>
+  <text x="1050" y="526" text-anchor="middle" font-size="8" fill="#374151">summary</text>
+
+  <rect x="1108" y="448" width="101" height="94" rx="5" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="1158" y="466" text-anchor="middle" font-size="9.5" fill="#111827" font-weight="bold">Translation</text>
+  <text x="1158" y="483" text-anchor="middle" font-size="8" fill="#374151">EN · ZH</text>
+  <text x="1158" y="496" text-anchor="middle" font-size="8" fill="#374151">MS · TA</text>
+  <text x="1158" y="513" text-anchor="middle" font-size="8" fill="#374151">+ clinical</text>
+  <text x="1158" y="526" text-anchor="middle" font-size="8" fill="#374151">glossary</text>
+
+  <rect x="1216" y="448" width="101" height="94" rx="5" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="1266" y="466" text-anchor="middle" font-size="9.5" fill="#111827" font-weight="bold">Text-to-Speech</text>
+  <text x="1266" y="483" text-anchor="middle" font-size="8" fill="#374151">per-language</text>
+  <text x="1266" y="496" text-anchor="middle" font-size="8" fill="#374151">voice synth</text>
+  <text x="1266" y="513" text-anchor="middle" font-size="8" fill="#374151">→ audio</text>
+  <text x="1266" y="526" text-anchor="middle" font-size="8" fill="#374151">in S3</text>
+
+  <rect x="1324" y="448" width="101" height="94" rx="5" fill="#fdf4ff" stroke="#a21caf" stroke-width="1.5"/>
+  <text x="1374" y="466" text-anchor="middle" font-size="9.5" fill="#111827" font-weight="bold">Image</text>
+  <text x="1374" y="483" text-anchor="middle" font-size="8" fill="#86198f" font-weight="bold">Nano Banana</text>
+  <text x="1374" y="496" text-anchor="middle" font-size="8" fill="#374151">(Gemini 2.5</text>
+  <text x="1374" y="509" text-anchor="middle" font-size="8" fill="#374151">Flash Image)</text>
+  <text x="1374" y="525" text-anchor="middle" font-size="8" fill="#374151">→ visual aids</text>
+
+  <!-- ── DE-IDENTIFICATION ANNOTATION (under AI Services) ──────── -->
+  <rect x="1006" y="566" width="424" height="24" rx="4" fill="#ecfeff" stroke="#0e7490" stroke-width="1.5"/>
+  <text x="1218" y="582" text-anchor="middle" font-size="9" fill="#155e75" font-weight="bold">⬑ AI receives de-identified text only — no NRIC / name / DOB · re-identified in SG tier</text>
+
+  <!-- ── DELIVERY (stub · no external vendor) ──────────────────── -->
+  <rect x="1220" y="690" width="210" height="95" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="1325" y="709" text-anchor="middle" font-size="9"  fill="#6b7280" font-style="italic">«out of scope · hackathon»</text>
+  <text x="1325" y="726" text-anchor="middle" font-size="12" fill="#111827" font-weight="bold">Delivery (stub)</text>
+  <text x="1325" y="742" text-anchor="middle" font-size="9"  fill="#374151">DeliveryProvider mints a link</text>
+  <text x="1325" y="756" text-anchor="middle" font-size="9"  fill="#374151">QR / printable at point of care</text>
+  <text x="1325" y="770" text-anchor="middle" font-size="9"  fill="#374151">No email / SMS · no contact PII</text>
+
+  <!-- ── LEGEND ────────────────────────────────────────────────── -->
+  <rect x="110" y="600" width="200" height="176" rx="6" fill="white" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="124" y="620" font-size="10" fill="#334155" font-weight="bold">Legend</text>
+  <line x1="124" y1="634" x2="156" y2="634" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="162" y="638" font-size="8.5" fill="#475569">Browser / HTTPS (person)</text>
+  <line x1="124" y1="652" x2="156" y2="652" stroke="#475569" stroke-width="1.5"/>
+  <text x="162" y="656" font-size="8.5" fill="#475569">Sync call (REST · SQL · HTTPS)</text>
+  <line x1="124" y1="670" x2="156" y2="670" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="162" y="674" font-size="8.5" fill="#475569">Async (enqueue · consume)</text>
+  <text x="124" y="696" font-size="8.5" fill="#475569">«Person» «Container»</text>
+  <text x="124" y="710" font-size="8.5" fill="#475569">«Database» «External»</text>
+  <text x="124" y="730" font-size="8.5" fill="#475569">Providers: mock | real</text>
+  <text x="124" y="744" font-size="8.5" fill="#475569">(PROVIDER_MODE)</text>
+  <text x="124" y="764" font-size="8.5" fill="#475569">1 image · ROLE=api|worker|beat</text>
+
+  <!-- ── ARROWS ────────────────────────────────────────────────── -->
+
+  <!-- 1. Clinician → Frontend -->
+  <line x1="165" y1="106" x2="150" y2="198" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-amber)"/>
+  <rect x="92" y="145" width="130" height="14" rx="3" fill="#fef9c3"/>
+  <text x="157" y="156" text-anchor="middle" font-size="8" fill="#92400e">HTTPS · session JWT</text>
+
+  <!-- 2. Patient → Frontend /family (right + bottom channel) -->
+  <polyline points="1420,64 1442,64 1442,858 70,858 70,531" fill="none" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-amber)"/>
+  <rect x="616" y="850" width="290" height="15" rx="3" fill="#fef9c3"/>
+  <text x="761" y="861" text-anchor="middle" font-size="8" fill="#92400e">HTTPS · per-member magic link → /family/:fid/member/:mid</text>
+
+  <!-- 3. Frontend ↔ API -->
+  <line x1="290" y1="400" x2="328" y2="400" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="328" y1="418" x2="290" y2="418" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="248" y="378" width="116" height="14" rx="3" fill="#e2e8f0"/>
+  <text x="306" y="389" text-anchor="middle" font-size="8" fill="#334155">REST / JSON · JWT</text>
+
+  <!-- 4. API → Redis (enqueue) -->
+  <line x1="580" y1="250" x2="626" y2="250" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#arr-async)"/>
+  <rect x="556" y="232" width="72" height="14" rx="3" fill="#ede9fe"/>
+  <text x="592" y="243" text-anchor="middle" font-size="8" fill="#5b21b6">enqueue</text>
+
+  <!-- 5. Redis → Workers (consume) -->
+  <line x1="710" y1="302" x2="710" y2="324" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#arr-async)"/>
+  <rect x="714" y="305" width="68" height="14" rx="3" fill="#ede9fe"/>
+  <text x="748" y="316" text-anchor="middle" font-size="8" fill="#5b21b6">consume</text>
+
+  <!-- 6. API ↔ Supabase -->
+  <line x1="445" y1="532" x2="445" y2="558" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="468" y1="558" x2="468" y2="532" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="474" y="534" width="66" height="14" rx="3" fill="#e2e8f0"/>
+  <text x="507" y="545" text-anchor="middle" font-size="8" fill="#334155">SQL · RLS</text>
+
+  <!-- 7. Workers ↔ Supabase (job state) -->
+  <line x1="628" y1="588" x2="582" y2="588" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="582" y1="606" x2="628" y2="606" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="556" y="610" width="68" height="14" rx="3" fill="#e2e8f0"/>
+  <text x="590" y="621" text-anchor="middle" font-size="8" fill="#334155">job rows</text>
+
+  <!-- 8. Workers → FHIR -->
+  <line x1="950" y1="420" x2="988" y2="350" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="905" y="398" width="120" height="14" rx="3" fill="#e2e8f0"/>
+  <text x="965" y="409" text-anchor="middle" font-size="8" fill="#334155">FHIR R4 (provider)</text>
+
+  <!-- 9. Workers → AI Services -->
+  <line x1="950" y1="492" x2="988" y2="480" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="892" y="466" width="140" height="14" rx="3" fill="#cffafe"/>
+  <text x="962" y="477" text-anchor="middle" font-size="8" fill="#155e75" font-weight="bold">de-identified text only</text>
+
+  <!-- 10. Workers → S3 -->
+  <line x1="790" y1="628" x2="790" y2="658" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="796" y="632" width="138" height="14" rx="3" fill="#e2e8f0"/>
+  <text x="865" y="643" text-anchor="middle" font-size="8" fill="#334155">presigned PUT (audio/pdf)</text>
+
+</svg>
