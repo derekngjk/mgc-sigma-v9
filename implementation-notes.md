@@ -355,6 +355,42 @@ Migrated the local SQLite database to Supabase (PostgreSQL). The monolithic `Com
 
 ---
 
+## Synapxe HealthX Sandbox Migration
+
+**Files:** `backend/fhir.py`, `backend/mock_data/mock-oncology-123.json`, `backend/.env.example`
+
+### What was changed
+
+The project was aligned with the Synapxe HealthX Innovation Sandbox (HX-IS) — Singapore's national NGEMR FHIR R4 sandbox — replacing the generic Epic Open FHIR Sandbox. The FHIR client now targets the Synapxe endpoint and authenticates with a bearer token. The mock patient fixture was updated to reflect Singapore demographics, identifiers, and hospital context.
+
+**Context:** MGC is being submitted to the Medical Grand Challenge 2026 (NUS). Synapxe (Singapore's national HealthTech agency) operates the HealthX Innovation Sandbox, which provides access to NGEMR — Singapore's Epic-based national EMR. The PoC must use Singapore-relevant synthetic data to be credible to local evaluators. API credentials are pending HX-IS registration.
+
+### FHIR endpoint decisions
+
+**Synapxe HealthX as the new default:** `FHIR_BASE_URL` defaults to `https://sandbox.healthx.gov.sg/api/FHIR/R4/`. This is the NGEMR FHIR R4 sandbox endpoint. Because NGEMR is built on Epic, the resource structure (`Patient.Read`, `Condition.Search`, `CarePlan.Search`) and URL path conventions are identical to the Epic FHIR R4 spec — no changes were needed to the request logic itself.
+
+**Bearer token authentication added:** Synapxe's HealthX APIs are gated behind OAuth2. A new `FHIR_ACCESS_TOKEN` env var is read at module load time. When set, `Authorization: Bearer <token>` is injected as a default header on every `httpx.Client` request. When empty (local dev using the mock path), no auth header is sent — the mock fallback triggers before any network call, so the absence of a token does not cause failures during development.
+
+**Parameter renamed `patient_id`:** The internal parameter in `_fetch_from_sandbox` was renamed from `epic_patient_id` to `patient_id`. In the Singapore context the identifier is an NRIC or FIN (e.g. `S6712345A`), not an Epic-format Base64 ID. The public-facing route path (`/api/patient/{epic_patient_id}`) was not renamed to avoid breaking the DB schema and tests — that rename belongs in a dedicated schema migration.
+
+### Mock data decisions
+
+**Patient re-skinned to Singapore context:** Elena Vasquez was replaced with **Tan Mei Ling** (NRIC `S6712345A`, DOB 1967-08-22, female), a realistic Singapore demographic profile. The NRIC uses the standard `S`-prefix format and conforms to the Synapxe FHIR identifier system URI (`https://fhir.synapxe.sg/identifier/nric-fin`).
+
+**Full FHIR `identifier` block added:** The mock patient now carries an `identifier` array with `use: "official"`, a type coding of `NRIC` from `http://terminology.hl7.org/CodeSystem/v2-0203`, and the Synapxe system URI. This mirrors what a real NGEMR patient record returns, ensuring the mock is structurally representative.
+
+**SNOMED CT codes added to conditions:** Each condition entry now includes a `system` and `code` from `http://snomed.info/sct` alongside the display text. This matches NGEMR's coding practice and makes the fixture more realistic for demo purposes. The parser ignores these codes today (`_parse_fhir_bundle` only reads `code.coding[0].display`), but they are present for future use.
+
+**Managing organisation set to NCCS:** `managingOrganization.display` is set to "National Cancer Centre Singapore (NCCS)". Care plan activities and notes reference NCCS/SGH context (NCCS Chemotherapy Suite, SGH Radiology). The oncology scenario itself (ddAC-T neoadjuvant chemotherapy, invasive ductal carcinoma stage III) is unchanged — it remains the strongest demo case for the HITL value proposition.
+
+**Resolved condition preserved:** "Iron deficiency anaemia" with `clinicalStatus.code = "resolved"` is still present in the fixture. This entry exists specifically to test that `_parse_fhir_bundle` correctly filters it out. Removing it would silently eliminate a regression guard.
+
+### Configuration decisions
+
+**`FHIR_ACCESS_TOKEN` documented in `.env.example`:** The new variable is added with a clear comment pointing to `https://innovation.healthx.sg/` for registration. The mock fallback path (`mock-oncology-123`) continues to work with no credentials set, so the local development experience is unchanged.
+
+---
+
 ## Feature Roadmap & TODOs
 
 The following core features are required to align the current proof-of-concept with the target functional architecture:

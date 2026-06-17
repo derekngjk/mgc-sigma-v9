@@ -5,10 +5,16 @@ from typing import Any
 
 import httpx
 
+# Synapxe HealthX Innovation Sandbox (HX-IS) — NGEMR FHIR R4 endpoint.
+# Requires HX-IS registration at https://innovation.healthx.sg/ to obtain the
+# sandbox URL and bearer token. Set both env vars once credentials are issued.
 FHIR_BASE_URL: str = os.getenv(
     "FHIR_BASE_URL",
-    "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4/",
+    "https://sandbox.healthx.gov.sg/api/FHIR/R4/",
 )
+# OAuth2 bearer token issued by the HealthX developer portal. Leave empty to
+# make unauthenticated requests (only works against the mock fallback path).
+FHIR_ACCESS_TOKEN: str = os.getenv("FHIR_ACCESS_TOKEN", "")
 MOCK_DATA_DIR: Path = Path(__file__).parent / "mock_data"
 
 
@@ -69,23 +75,26 @@ def load_mock_patient(patient_id: str = "mock-oncology-123") -> dict[str, Any]:
 # ── internal helpers ──────────────────────────────────────────────────────────
 
 
-def _fetch_from_sandbox(epic_patient_id: str) -> dict[str, Any]:
-    """Make three synchronous FHIR R4 calls and return the raw parsed JSON bundle."""
+def _fetch_from_sandbox(patient_id: str) -> dict[str, Any]:
+    """Make three synchronous FHIR R4 calls against the Synapxe HealthX sandbox."""
     base = FHIR_BASE_URL.rstrip("/")
     timeout = 10.0
+    headers: dict[str, str] = {}
+    if FHIR_ACCESS_TOKEN:
+        headers["Authorization"] = f"Bearer {FHIR_ACCESS_TOKEN}"
     try:
-        with httpx.Client(timeout=timeout) as client:
-            patient_resp = client.get(f"{base}/Patient/{epic_patient_id}")
+        with httpx.Client(timeout=timeout, headers=headers) as client:
+            patient_resp = client.get(f"{base}/Patient/{patient_id}")
             if patient_resp.status_code == 404:
                 raise PatientNotFoundError(
-                    f"Patient {epic_patient_id!r} not found in FHIR sandbox"
+                    f"Patient {patient_id!r} not found in FHIR sandbox"
                 )
             if patient_resp.status_code != 200:
                 raise FHIRError(f"Patient.Read returned {patient_resp.status_code}")
 
             condition_resp = client.get(
                 f"{base}/Condition",
-                params={"patient": epic_patient_id, "clinical-status": "active"},
+                params={"patient": patient_id, "clinical-status": "active"},
             )
             if condition_resp.status_code != 200:
                 raise FHIRError(
@@ -94,7 +103,7 @@ def _fetch_from_sandbox(epic_patient_id: str) -> dict[str, Any]:
 
             care_plan_resp = client.get(
                 f"{base}/CarePlan",
-                params={"patient": epic_patient_id, "status": "active"},
+                params={"patient": patient_id, "status": "active"},
             )
             if care_plan_resp.status_code != 200:
                 raise FHIRError(
