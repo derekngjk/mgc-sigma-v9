@@ -2,7 +2,7 @@ import json
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -17,6 +17,7 @@ from db import (
     update_communication,
 )
 from fhir import FHIRError, PatientNotFoundError, fetch_patient_data
+from auth import verify_clinician_token
 from llm import LLMConfigError, LLMError, generate_summary
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -107,7 +108,10 @@ def root():
 
 
 @app.get("/api/patient/{epic_patient_id}", response_model=PatientResponse)
-def get_patient(epic_patient_id: str) -> PatientResponse:
+def get_patient(
+    epic_patient_id: str,
+    _: dict = Depends(verify_clinician_token),
+) -> PatientResponse:
     try:
         data = fetch_patient_data(epic_patient_id)
     except PatientNotFoundError:
@@ -151,7 +155,10 @@ def get_patient(epic_patient_id: str) -> PatientResponse:
 
 
 @app.post("/api/generate", response_model=GenerateResponse)
-def generate(req: GenerateRequest) -> GenerateResponse:
+def generate(
+    req: GenerateRequest,
+    _: dict = Depends(verify_clinician_token),
+) -> GenerateResponse:
     record = get_communication(req.comm_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Communication record not found")
@@ -200,7 +207,11 @@ def get_family_view(comm_id: str) -> FamilyViewResponse:
 
 
 @app.post("/api/communications/{comm_id}/approve", response_model=ApproveResponse)
-def approve_communication(comm_id: str, req: ApproveRequest) -> ApproveResponse:
+def approve_communication(
+    comm_id: str,
+    req: ApproveRequest,
+    _: dict = Depends(verify_clinician_token),
+) -> ApproveResponse:
     record = get_communication(comm_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Communication record not found")

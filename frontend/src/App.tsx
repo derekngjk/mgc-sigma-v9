@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Route, Routes } from 'react-router-dom';
+import { AuthGate } from './components/AuthGate';
 import ClinicianPage from './pages/ClinicianPage';
 import FamilyPage from './pages/FamilyPage';
+import LoginPage from './pages/LoginPage';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -74,7 +76,15 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<WelcomeScreen />} />
-      <Route path="/clinician" element={<ClinicianPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/clinician"
+        element={
+          <AuthGate>
+            {(session) => <ClinicianPage session={session} />}
+          </AuthGate>
+        }
+      />
       <Route path="/family/:fid/member/:mid" element={<FamilyPage />} />
     </Routes>
   );
