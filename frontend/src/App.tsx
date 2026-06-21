@@ -75,7 +75,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<WelcomeScreen />} />
       <Route path="/clinician" element={<ClinicianPage />} />
-      <Route path="/family/:id" element={<FamilyPage />} />
+      <Route path="/family/:fid/member/:mid" element={<FamilyPage />} />
     </Routes>
   );
 }

@@ -33,36 +33,31 @@ def test_approve_returns_200(
     client: TestClient, seeded_comm_id: str, mock_supabase
 ) -> None:
     # side_effect on care_plan_translations table
+    # Entry 1: consumed by first get_communication (pre-update existence check)
+    # Entry 2: consumed by update_communication's .update().eq().execute() — same table mock
+    # Entry 3: consumed by second get_communication (post-update read for approved_at + patient_id)
     mock_supabase.table("care_plan_translations").select().eq().execute.side_effect = [
         MagicMock(data=[{"id": seeded_comm_id, "status": "Draft", "patients": {}}]),
+        MagicMock(data=[{"id": seeded_comm_id}]),
         MagicMock(
             data=[
                 {
                     "id": seeded_comm_id,
+                    "patient_id": "patient-uuid-1",
                     "status": "Approved",
                     "approved_at": "2023-01-01T00:00:00Z",
-                    "patients": {},
-                }
-            ]
-        ),
-        MagicMock(
-            data=[
-                {
-                    "id": seeded_comm_id,
-                    "status": "Approved",
-                    "approved_at": "2023-01-01T00:00:00Z",
-                    "patients": {},
+                    "patients": {"patient_name": "Tan Mei Ling", "epic_patient_id": "mock-oncology-123"},
                 }
             ]
         ),
     ]
-    mock_supabase.table(
-        "care_plan_translations"
-    ).update().eq().execute.return_value = MagicMock(data=[{"id": seeded_comm_id}])
 
     resp = client.post(
         f"/api/communications/{seeded_comm_id}/approve",
         json={"ai_summary_text": APPROVED_TEXT},
     )
     assert resp.status_code == 200
-    assert resp.json()["id"] == seeded_comm_id
+    body = resp.json()
+    assert body["id"] == seeded_comm_id
+    assert "/family/" in body["family_link"]
+    assert "/member/" in body["family_link"]

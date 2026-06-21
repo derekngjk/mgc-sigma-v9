@@ -107,16 +107,16 @@ function ChangesSection({ diff }: { diff: ConditionDiff }) {
 // ── main page ─────────────────────────────────────────────────────────────────
 
 export default function FamilyPage() {
-  const { id } = useParams<{ id: string }>();
+  const { fid, mid } = useParams<{ fid: string; mid: string }>();
   const [pageState, setPageState] = useState<PageState>('loading');
   const [data, setData] = useState<FamilyViewData | null>(null);
 
   useEffect(() => {
-    if (!id) {
+    if (!fid || !mid) {
       setPageState('not_found');
       return;
     }
-    fetch(`${API_BASE}/api/communications/${id}`)
+    fetch(`${API_BASE}/api/family/${fid}/member/${mid}`)
       .then(async (res) => {
         if (!res.ok) {
           setPageState('not_found');
@@ -127,7 +127,7 @@ export default function FamilyPage() {
         setPageState('loaded');
       })
       .catch(() => setPageState('not_found'));
-  }, [id]);
+  }, [fid, mid]);
 
   if (pageState === 'loading') return <LoadingScreen />;
   if (pageState === 'not_found' || !data) return <NotFoundScreen />;
