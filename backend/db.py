@@ -31,10 +31,8 @@ def get_supabase() -> Client:
 
 def init_db(db_url: str) -> None:
     """Initialize Supabase/Postgres tables using psycopg3."""
-    # We use the connection string directly here
     with psycopg.connect(db_url) as conn:
         with conn.cursor() as cur:
-            # Create patients table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS patients (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -46,7 +44,6 @@ def init_db(db_url: str) -> None:
                 )
             """)
 
-            # Create care_plan_translations table (mirrors old Communications)
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS care_plan_translations (
                     id UUID PRIMARY KEY,
@@ -62,7 +59,26 @@ def init_db(db_url: str) -> None:
                     condition_diff JSONB
                 )
             """)
-    # Ensure client is ready
+
+            # One family group per patient — stable across approvals
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS families (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    patient_id UUID UNIQUE REFERENCES patients(id),
+                    created_at TIMESTAMPTZ DEFAULT now()
+                )
+            """)
+
+            # Individual family members who can access the patient's summary
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS family_members (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    family_id UUID REFERENCES families(id),
+                    name TEXT NOT NULL,
+                    relationship TEXT NOT NULL DEFAULT 'patient',
+                    created_at TIMESTAMPTZ DEFAULT now()
+                )
+            """)
     get_supabase()
 
 
@@ -173,6 +189,94 @@ def get_latest_approved_communication(epic_patient_id: str) -> Optional[dict]:
 
     import json
 
+    if isinstance(record.get("conditions_json"), (list, dict)):
+        record["conditions_json"] = json.dumps(record["conditions_json"])
+    if isinstance(record.get("condition_diff"), (list, dict)):
+        record["condition_diff"] = json.dumps(record["condition_diff"])
+
+    return record
+
+
+def get_or_create_family(patient_id: str) -> str:
+    """Return existing family_id for this patient, or create one."""
+    supabase = get_supabase()
+    res = (
+        supabase.table("families")
+        .select("id")
+        .eq("patient_id", patient_id)
+        .execute()
+    )
+    if res.data:
+        return res.data[0]["id"]
+    family_id = str(uuid.uuid4())
+    supabase.table("families").insert({"id": family_id, "patient_id": patient_id}).execute()
+    return family_id
+
+
+def get_or_create_primary_member(family_id: str, name: str) -> str:
+    """Return existing primary (relationship='patient') member_id, or create one."""
+    supabase = get_supabase()
+    res = (
+        supabase.table("family_members")
+        .select("id")
+        .eq("family_id", family_id)
+        .eq("relationship", "patient")
+        .execute()
+    )
+    if res.data:
+        return res.data[0]["id"]
+    member_id = str(uuid.uuid4())
+    supabase.table("family_members").insert({
+        "id": member_id,
+        "family_id": family_id,
+        "name": name,
+        "relationship": "patient",
+    }).execute()
+    return member_id
+
+
+def get_family_summary(family_id: str, member_id: str) -> Optional[dict]:
+    """Validate fid+mid belong together, then return the latest approved summary."""
+    supabase = get_supabase()
+
+    member_res = (
+        supabase.table("family_members")
+        .select("id")
+        .eq("id", member_id)
+        .eq("family_id", family_id)
+        .execute()
+    )
+    if not member_res.data:
+        return None
+
+    family_res = (
+        supabase.table("families")
+        .select("patient_id")
+        .eq("id", family_id)
+        .execute()
+    )
+    if not family_res.data:
+        return None
+    patient_id = family_res.data[0]["patient_id"]
+
+    res = (
+        supabase.table("care_plan_translations")
+        .select("*, patients(patient_name, epic_patient_id)")
+        .eq("patient_id", patient_id)
+        .eq("status", "Approved")
+        .order("approved_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not res.data:
+        return None
+
+    record = res.data[0]
+    patient = record.pop("patients", {})
+    record["patient_name"] = patient.get("patient_name", "")
+    record["epic_patient_id"] = patient.get("epic_patient_id", "")
+
+    import json
     if isinstance(record.get("conditions_json"), (list, dict)):
         record["conditions_json"] = json.dumps(record["conditions_json"])
     if isinstance(record.get("condition_diff"), (list, dict)):

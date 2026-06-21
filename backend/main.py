@@ -2,18 +2,22 @@ import json
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from db import (
     create_communication,
     get_communication,
+    get_family_summary,
     get_latest_approved_communication,
+    get_or_create_family,
+    get_or_create_primary_member,
     init_db,
     update_communication,
 )
 from fhir import FHIRError, PatientNotFoundError, fetch_patient_data
+from auth import verify_clinician_token
 from llm import LLMConfigError, LLMError, generate_summary
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -104,7 +108,10 @@ def root():
 
 
 @app.get("/api/patient/{epic_patient_id}", response_model=PatientResponse)
-def get_patient(epic_patient_id: str) -> PatientResponse:
+def get_patient(
+    epic_patient_id: str,
+    _: dict = Depends(verify_clinician_token),
+) -> PatientResponse:
     try:
         data = fetch_patient_data(epic_patient_id)
     except PatientNotFoundError:
@@ -148,7 +155,10 @@ def get_patient(epic_patient_id: str) -> PatientResponse:
 
 
 @app.post("/api/generate", response_model=GenerateResponse)
-def generate(req: GenerateRequest) -> GenerateResponse:
+def generate(
+    req: GenerateRequest,
+    _: dict = Depends(verify_clinician_token),
+) -> GenerateResponse:
     record = get_communication(req.comm_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Communication record not found")
@@ -197,7 +207,11 @@ def get_family_view(comm_id: str) -> FamilyViewResponse:
 
 
 @app.post("/api/communications/{comm_id}/approve", response_model=ApproveResponse)
-def approve_communication(comm_id: str, req: ApproveRequest) -> ApproveResponse:
+def approve_communication(
+    comm_id: str,
+    req: ApproveRequest,
+    _: dict = Depends(verify_clinician_token),
+) -> ApproveResponse:
     record = get_communication(comm_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Communication record not found")
@@ -207,8 +221,32 @@ def approve_communication(comm_id: str, req: ApproveRequest) -> ApproveResponse:
         status="Approved",
     )
     updated = get_communication(comm_id)
+    patient_id = updated.get("patient_id", "")
+    fid = get_or_create_family(patient_id)
+    mid = get_or_create_primary_member(fid, updated.get("patient_name", ""))
     return ApproveResponse(
         id=comm_id,
         approved_at=updated["approved_at"],
-        family_link=f"{frontend_origin}/family/{comm_id}",
+        family_link=f"{frontend_origin}/family/{fid}/member/{mid}",
+    )
+
+
+@app.get("/api/family/{family_id}/member/{member_id}", response_model=FamilyViewResponse)
+def get_family_member_view(family_id: str, member_id: str) -> FamilyViewResponse:
+    record = get_family_summary(family_id, member_id)
+    if record is None:
+        raise HTTPException(
+            status_code=404, detail="Summary not found or not yet approved"
+        )
+    diff_raw = (
+        json.loads(record["condition_diff"])
+        if record.get("condition_diff")
+        else {"added": [], "removed": [], "ongoing": []}
+    )
+    return FamilyViewResponse(
+        id=record["id"],
+        patient_name=record["patient_name"],
+        ai_summary_text=record["ai_summary_text"],
+        approved_at=record["approved_at"],
+        condition_diff=ConditionDiff(**diff_raw),
     )

@@ -25,7 +25,7 @@ There are no shared packages between the two services. The backend is the single
 mgc-sigma-v9/
 ├── backend/                    FastAPI service (Python 3.11)
 │   ├── main.py                 Routes, CORS config, Pydantic response models, app bootstrap
-│   ├── db.py                   Supabase CRUD (PostgreSQL) — init_db, create_communication, get_communication, update_communication
+│   ├── db.py                   Supabase CRUD (PostgreSQL) — init_db, create_communication, get_communication, update_communication, get_or_create_family, get_or_create_primary_member, get_family_summary
 │   ├── fhir.py                 FHIR fetch + parse — fetch_patient_data, _fetch_from_sandbox, _parse_fhir_bundle
 │   ├── llm.py                  LLM translation — generate_summary, _call_llm (Anthropic + OpenAI)
 │   ├── mock_data/
@@ -44,12 +44,13 @@ mgc-sigma-v9/
 │       ├── test_task_3_1.py    LLM translation (2 tests)
 │       ├── test_task_4_2.py    Approval + magic link (1 test)
 │       ├── test_task_4_3.py    Patient/family mobile viewer (2 tests)
-│       └── test_change_tracking.py Condition change tracking (3 tests)
+│       ├── test_change_tracking.py Condition change tracking (3 tests)
+│       └── test_family_route.py    Family member access route (3 tests)
 │
 ├── frontend/                   React 18 + Vite + TypeScript + Tailwind CSS
 │   ├── src/
 │   │   ├── main.tsx            React entry point — BrowserRouter + StrictMode wrapper
-│   │   ├── App.tsx             Routes: / → WelcomeScreen, /clinician → ClinicianPage
+│   │   ├── App.tsx             Routes: / → WelcomeScreen, /clinician → ClinicianPage, /family/:fid/member/:mid → FamilyPage
 │   │   ├── index.css           Tailwind base import
 │   │   └── pages/
 │   │       └── ClinicianPage.tsx   Full clinician workflow — patient selector, FHIR data panel,
@@ -68,7 +69,7 @@ mgc-sigma-v9/
 | --- | --- | --- |
 | `/` | ✅ Live | Welcome screen — backend health check, link to `/clinician` |
 | `/clinician` | ✅ Live | EHR-embedded tab — patient selector, side-by-side Raw FHIR vs. AI Draft, Approve button |
-| `/family/:id` | ✅ Live | Mobile-first patient/family viewer — fetches approved summary by UUID; shows condition diff (new/resolved) if changes exist; 404 on unknown or unapproved ID |
+| `/family/:fid/member/:mid` | ✅ Live | Mobile-first patient/family viewer — validates family+member pair; fetches latest approved summary for the patient; shows condition diff (new/resolved) if changes exist; 404 on invalid pair or no approved summary |
 
 ### Backend API surface
 
@@ -77,8 +78,9 @@ mgc-sigma-v9/
 | `GET /health` | ✅ Live | Liveness check |
 | `GET /api/patient/{id}` | ✅ Live | Fetch + parse FHIR data (Patient, Condition, CarePlan); falls back to mock JSON for `mock-oncology-123`; creates a Draft `Communications` record; computes three-way condition diff (added/removed/ongoing) vs. last approved record; returns `PatientResponse` with `condition_diff` |
 | `POST /api/generate` | ✅ Live | Accepts `comm_id` + `target_audience`; calls LLM (`LLM_PROVIDER` env var selects Anthropic or OpenAI); stores summary in `Communications`; returns `GenerateResponse` |
-| `POST /api/communications/{id}/approve` | ✅ Live | Saves edited `ai_summary_text`, flips status to `Approved`, returns `id` + `approved_at` + `family_link` |
-| `GET /api/communications/{id}` | ✅ Live | Return approved summary for the family viewer; 404 if unknown or status != Approved |
+| `POST /api/communications/{id}/approve` | ✅ Live | Saves edited `ai_summary_text`, flips status to `Approved`; creates/reuses the patient's `families` + `family_members` records; returns `id` + `approved_at` + `family_link` in new `/family/{fid}/member/{mid}` format |
+| `GET /api/communications/{id}` | ✅ Live | Legacy family viewer endpoint — return approved summary by comm_id; 404 if unknown or status != Approved |
+| `GET /api/family/{fid}/member/{mid}` | ✅ Live | Family member access endpoint — validates both IDs belong together; returns latest approved summary for the patient; 404 if pair is invalid or no approved summary exists |
 
 ### Supabase schema (PostgreSQL)
 
@@ -91,7 +93,8 @@ mgc-sigma-v9/
 - `created_at` (TIMESTAMPTZ): Auto-set on creation
 
 #### `care_plan_translations` table
-- `id` (UUID PK): Unique identifier for this record (Magic Link token)
+
+- `id` (UUID PK): Unique identifier for this record
 - `patient_id` (UUID FK): Reference to `patients.id`
 - `fhir_source` (TEXT): `"sandbox"` or `"mock"`
 - `raw_clinical_text` (TEXT): Serialised FHIR payload
@@ -102,6 +105,20 @@ mgc-sigma-v9/
 - `approved_at` (TIMESTAMPTZ): Timestamp of clinician approval
 - `conditions_json` (JSONB): Parsed active conditions
 - `condition_diff` (JSONB): NEW/ONGOING/RESOLVED delta
+
+#### `families` table
+
+- `id` (UUID PK): Family group identifier — the `:fid` in the magic link
+- `patient_id` (UUID FK, UNIQUE): Reference to `patients.id` — one family group per patient, stable across approvals
+- `created_at` (TIMESTAMPTZ): Auto-set on creation
+
+#### `family_members` table
+
+- `id` (UUID PK): Family member identifier — the `:mid` in the magic link
+- `family_id` (UUID FK): Reference to `families.id`
+- `name` (TEXT): Display name of the member
+- `relationship` (TEXT): Role within the family, e.g. `"patient"`, `"spouse"`, `"child"`
+- `created_at` (TIMESTAMPTZ): Auto-set on creation
 
 ---
 

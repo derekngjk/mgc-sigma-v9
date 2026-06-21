@@ -355,6 +355,80 @@ Migrated the local SQLite database to Supabase (PostgreSQL). The monolithic `Com
 
 ---
 
+## Synapxe HealthX Sandbox Migration
+
+**Files:** `backend/fhir.py`, `backend/mock_data/mock-oncology-123.json`, `backend/.env.example`
+
+### What was changed
+
+The project was aligned with the Synapxe HealthX Innovation Sandbox (HX-IS) — Singapore's national NGEMR FHIR R4 sandbox — replacing the generic Epic Open FHIR Sandbox. The FHIR client now targets the Synapxe endpoint and authenticates with a bearer token. The mock patient fixture was updated to reflect Singapore demographics, identifiers, and hospital context.
+
+**Context:** MGC is being submitted to the Medical Grand Challenge 2026 (NUS). Synapxe (Singapore's national HealthTech agency) operates the HealthX Innovation Sandbox, which provides access to NGEMR — Singapore's Epic-based national EMR. The PoC must use Singapore-relevant synthetic data to be credible to local evaluators. API credentials are pending HX-IS registration.
+
+### FHIR endpoint decisions
+
+**Synapxe HealthX as the new default:** `FHIR_BASE_URL` defaults to `https://sandbox.healthx.gov.sg/api/FHIR/R4/`. This is the NGEMR FHIR R4 sandbox endpoint. Because NGEMR is built on Epic, the resource structure (`Patient.Read`, `Condition.Search`, `CarePlan.Search`) and URL path conventions are identical to the Epic FHIR R4 spec — no changes were needed to the request logic itself.
+
+**Bearer token authentication added:** Synapxe's HealthX APIs are gated behind OAuth2. A new `FHIR_ACCESS_TOKEN` env var is read at module load time. When set, `Authorization: Bearer <token>` is injected as a default header on every `httpx.Client` request. When empty (local dev using the mock path), no auth header is sent — the mock fallback triggers before any network call, so the absence of a token does not cause failures during development.
+
+**Parameter renamed `patient_id`:** The internal parameter in `_fetch_from_sandbox` was renamed from `epic_patient_id` to `patient_id`. In the Singapore context the identifier is an NRIC or FIN (e.g. `S6712345A`), not an Epic-format Base64 ID. The public-facing route path (`/api/patient/{epic_patient_id}`) was not renamed to avoid breaking the DB schema and tests — that rename belongs in a dedicated schema migration.
+
+### Mock data decisions
+
+**Patient re-skinned to Singapore context:** Elena Vasquez was replaced with **Tan Mei Ling** (NRIC `S6712345A`, DOB 1967-08-22, female), a realistic Singapore demographic profile. The NRIC uses the standard `S`-prefix format and conforms to the Synapxe FHIR identifier system URI (`https://fhir.synapxe.sg/identifier/nric-fin`).
+
+**Full FHIR `identifier` block added:** The mock patient now carries an `identifier` array with `use: "official"`, a type coding of `NRIC` from `http://terminology.hl7.org/CodeSystem/v2-0203`, and the Synapxe system URI. This mirrors what a real NGEMR patient record returns, ensuring the mock is structurally representative.
+
+**SNOMED CT codes added to conditions:** Each condition entry now includes a `system` and `code` from `http://snomed.info/sct` alongside the display text. This matches NGEMR's coding practice and makes the fixture more realistic for demo purposes. The parser ignores these codes today (`_parse_fhir_bundle` only reads `code.coding[0].display`), but they are present for future use.
+
+**Managing organisation set to NCCS:** `managingOrganization.display` is set to "National Cancer Centre Singapore (NCCS)". Care plan activities and notes reference NCCS/SGH context (NCCS Chemotherapy Suite, SGH Radiology). The oncology scenario itself (ddAC-T neoadjuvant chemotherapy, invasive ductal carcinoma stage III) is unchanged — it remains the strongest demo case for the HITL value proposition.
+
+**Resolved condition preserved:** "Iron deficiency anaemia" with `clinicalStatus.code = "resolved"` is still present in the fixture. This entry exists specifically to test that `_parse_fhir_bundle` correctly filters it out. Removing it would silently eliminate a regression guard.
+
+### Configuration decisions
+
+**`FHIR_ACCESS_TOKEN` documented in `.env.example`:** The new variable is added with a clear comment pointing to `https://innovation.healthx.sg/` for registration. The mock fallback path (`mock-oncology-123`) continues to work with no credentials set, so the local development experience is unchanged.
+
+---
+
+## Family Access Route Refactor
+
+**Files:** `backend/db.py`, `backend/main.py`, `backend/tests/test_task_4_2.py`, `backend/tests/test_family_route.py`, `frontend/src/App.tsx`, `frontend/src/pages/FamilyPage.tsx`
+
+### What was built
+
+The family viewer URL was restructured from `/family/{comm_id}` (a single opaque UUID) to `/family/{fid}/member/{mid}` — a two-part URL where both IDs must match a valid record before the summary is returned. Two new Supabase tables (`families`, `family_members`) underpin the access model.
+
+### Schema decisions
+
+**One `families` row per patient, not per approval:** The `patient_id` column on `families` has a UNIQUE constraint. This means the family group is a stable identity for the patient — the magic link URL never changes across re-approvals. The viewer always resolves to the *latest* approved `care_plan_translations` row for that patient. If this constraint were instead on `care_plan_translation_id`, each approval would generate a new link that families would need to be re-issued.
+
+**`relationship` column on `family_members`:** Currently only `"patient"` is used for the auto-created primary member. The column exists to support additional members (spouse, child) without a schema change — they can be inserted with `relationship="spouse"` etc. This is deliberate future-proofing at zero schema cost.
+
+**No separate access token:** The two-part URL acts as the token. Both `fid` and `mid` are UUIDs (122 bits of entropy combined). A third token parameter would add friction (harder to share as a link or QR code) with negligible additional security at this PoC stage.
+
+### DB function decisions
+
+**`get_or_create_family` and `get_or_create_primary_member` are idempotent:** Both functions check for an existing record before inserting. This makes repeated calls to `approve_communication` safe — re-approving a record returns the same `fid` and `mid`, preserving the stable link.
+
+**`get_family_summary` validates membership before resolving the patient:** The validation query (`family_members` where `id=mid AND family_id=fid`) is the first thing the function does. If it returns empty, the function returns `None` immediately without touching `families` or `care_plan_translations`. This prevents any information leakage — an invalid `mid` reveals nothing about whether `fid` exists.
+
+### Backend route decisions
+
+**`approve_communication` reads `patient_id` from the post-update `get_communication` result:** The `care_plan_translations` record already contains `patient_id` as a FK column; no extra query is needed to resolve the patient. `get_or_create_family` receives it directly.
+
+**Legacy `GET /api/communications/{id}` preserved:** The old endpoint is retained for backward compatibility with `test_task_4_3.py` and any tooling that may call it. The frontend no longer uses it (all family traffic goes through the new endpoint), but removing it would break the existing test suite without a corresponding gain.
+
+### Testing decisions
+
+**`test_family_route.py` covers three distinct 404 causes:** The new test file has separate cases for (1) invalid `fid+mid` pair, and (2) valid pair but no approved summary. These are operationally different failures — the first means the link was forged or corrupted; the second means a clinician hasn't approved yet. Both correctly return 404 with the same message (no information leakage).
+
+**`test_task_4_2.py` updated to assert link format:** The approval test now checks that `family_link` contains both `/family/` and `/member/` substrings rather than asserting the full URL (which would embed generated UUIDs). This is the right level of specificity — the format is contractual, the exact IDs are not.
+
+**Three `side_effect` entries for `care_plan_translations`:** The mock's `execute` method is shared across all chained calls on the same table mock (select, update, insert all return the same mock object). The update call in `update_communication` consumes one entry from the side_effect list. The entries map to: (1) pre-update existence check, (2) the update call itself, (3) post-update read for `approved_at` and `patient_id`.
+
+---
+
 ## Feature Roadmap & TODOs
 
 The following core features are required to align the current proof-of-concept with the target functional architecture:
@@ -363,7 +437,7 @@ The following core features are required to align the current proof-of-concept w
    * Migrate the local SQLite schema to Supabase (Postgres).
    * Establish tables for `patients` and `care_plan_translations`. (Next: `profiles`, `clinics`, `families`).
 
-2. **Update Family Access Route**
+2. **Update Family Access Route** ✅
    * Refactor the frontend router and backend endpoints to use the secure, structured `/family/:fid/member/:mid` path.
    * Implement token-based validation for family member access.
 

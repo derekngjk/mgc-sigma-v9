@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/pages/clinicianpage.tsx","./src/pages/familypage.tsx"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/authgate.tsx","./src/lib/supabase.ts","./src/pages/clinicianpage.tsx","./src/pages/familypage.tsx","./src/pages/loginpage.tsx"],"version":"5.9.3"}

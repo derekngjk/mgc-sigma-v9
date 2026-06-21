@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import type { Session } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -259,7 +261,8 @@ function AiDraftPanel({
 
 // ── main page ─────────────────────────────────────────────────────────────────
 
-export default function ClinicianPage() {
+export default function ClinicianPage({ session }: { session: Session }) {
+  const authHeader = { Authorization: `Bearer ${session.access_token}` };
   const [selectedPatientId, setSelectedPatientId] = useState(PATIENTS[0].id);
   const [stage, setStage] = useState<Stage>('idle');
   const [patient, setPatient] = useState<PatientData | null>(null);
@@ -280,7 +283,9 @@ export default function ClinicianPage() {
     setGenerateError(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/patient/${selectedPatientId}`);
+      const res = await fetch(`${API_BASE}/api/patient/${selectedPatientId}`, {
+        headers: authHeader,
+      });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { detail?: string };
         throw new Error(body.detail ?? `HTTP ${res.status}`);
@@ -303,7 +308,7 @@ export default function ClinicianPage() {
     try {
       const res = await fetch(`${API_BASE}/api/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeader },
         body: JSON.stringify({ comm_id: commId, target_audience: audience }),
       });
       if (!res.ok) {
@@ -324,7 +329,7 @@ export default function ClinicianPage() {
     try {
       const res = await fetch(`${API_BASE}/api/communications/${commId}/approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeader },
         body: JSON.stringify({ ai_summary_text: draftText }),
       });
       if (!res.ok) {
@@ -351,9 +356,17 @@ export default function ClinicianPage() {
             <span className="text-slate-500">/</span>
             <span className="text-sm text-slate-300">Clinician View</span>
           </div>
-          <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-xs font-medium text-amber-950">
-            PoC · Synthetic Data Only
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-xs font-medium text-amber-950">
+              PoC · Synthetic Data Only
+            </span>
+            <button
+              onClick={() => supabase.auth.signOut()}
+              className="text-xs text-slate-400 hover:text-slate-200"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
 
