@@ -391,6 +391,44 @@ The project was aligned with the Synapxe HealthX Innovation Sandbox (HX-IS) — 
 
 ---
 
+## Family Access Route Refactor
+
+**Files:** `backend/db.py`, `backend/main.py`, `backend/tests/test_task_4_2.py`, `backend/tests/test_family_route.py`, `frontend/src/App.tsx`, `frontend/src/pages/FamilyPage.tsx`
+
+### What was built
+
+The family viewer URL was restructured from `/family/{comm_id}` (a single opaque UUID) to `/family/{fid}/member/{mid}` — a two-part URL where both IDs must match a valid record before the summary is returned. Two new Supabase tables (`families`, `family_members`) underpin the access model.
+
+### Schema decisions
+
+**One `families` row per patient, not per approval:** The `patient_id` column on `families` has a UNIQUE constraint. This means the family group is a stable identity for the patient — the magic link URL never changes across re-approvals. The viewer always resolves to the *latest* approved `care_plan_translations` row for that patient. If this constraint were instead on `care_plan_translation_id`, each approval would generate a new link that families would need to be re-issued.
+
+**`relationship` column on `family_members`:** Currently only `"patient"` is used for the auto-created primary member. The column exists to support additional members (spouse, child) without a schema change — they can be inserted with `relationship="spouse"` etc. This is deliberate future-proofing at zero schema cost.
+
+**No separate access token:** The two-part URL acts as the token. Both `fid` and `mid` are UUIDs (122 bits of entropy combined). A third token parameter would add friction (harder to share as a link or QR code) with negligible additional security at this PoC stage.
+
+### DB function decisions
+
+**`get_or_create_family` and `get_or_create_primary_member` are idempotent:** Both functions check for an existing record before inserting. This makes repeated calls to `approve_communication` safe — re-approving a record returns the same `fid` and `mid`, preserving the stable link.
+
+**`get_family_summary` validates membership before resolving the patient:** The validation query (`family_members` where `id=mid AND family_id=fid`) is the first thing the function does. If it returns empty, the function returns `None` immediately without touching `families` or `care_plan_translations`. This prevents any information leakage — an invalid `mid` reveals nothing about whether `fid` exists.
+
+### Backend route decisions
+
+**`approve_communication` reads `patient_id` from the post-update `get_communication` result:** The `care_plan_translations` record already contains `patient_id` as a FK column; no extra query is needed to resolve the patient. `get_or_create_family` receives it directly.
+
+**Legacy `GET /api/communications/{id}` preserved:** The old endpoint is retained for backward compatibility with `test_task_4_3.py` and any tooling that may call it. The frontend no longer uses it (all family traffic goes through the new endpoint), but removing it would break the existing test suite without a corresponding gain.
+
+### Testing decisions
+
+**`test_family_route.py` covers three distinct 404 causes:** The new test file has separate cases for (1) invalid `fid+mid` pair, and (2) valid pair but no approved summary. These are operationally different failures — the first means the link was forged or corrupted; the second means a clinician hasn't approved yet. Both correctly return 404 with the same message (no information leakage).
+
+**`test_task_4_2.py` updated to assert link format:** The approval test now checks that `family_link` contains both `/family/` and `/member/` substrings rather than asserting the full URL (which would embed generated UUIDs). This is the right level of specificity — the format is contractual, the exact IDs are not.
+
+**Three `side_effect` entries for `care_plan_translations`:** The mock's `execute` method is shared across all chained calls on the same table mock (select, update, insert all return the same mock object). The update call in `update_communication` consumes one entry from the side_effect list. The entries map to: (1) pre-update existence check, (2) the update call itself, (3) post-update read for `approved_at` and `patient_id`.
+
+---
+
 ## Feature Roadmap & TODOs
 
 The following core features are required to align the current proof-of-concept with the target functional architecture:
@@ -399,7 +437,7 @@ The following core features are required to align the current proof-of-concept w
    * Migrate the local SQLite schema to Supabase (Postgres).
    * Establish tables for `patients` and `care_plan_translations`. (Next: `profiles`, `clinics`, `families`).
 
-2. **Update Family Access Route**
+2. **Update Family Access Route** ✅
    * Refactor the frontend router and backend endpoints to use the secure, structured `/family/:fid/member/:mid` path.
    * Implement token-based validation for family member access.
 
