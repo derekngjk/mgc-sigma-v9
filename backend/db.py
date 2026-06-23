@@ -79,6 +79,11 @@ def init_db(db_url: str) -> None:
                     created_at TIMESTAMPTZ DEFAULT now()
                 )
             """)
+
+            # Backend uses the anon key for CRUD — disable RLS so server-side
+            # writes are not blocked by missing policies on these tables.
+            cur.execute("ALTER TABLE families DISABLE ROW LEVEL SECURITY")
+            cur.execute("ALTER TABLE family_members DISABLE ROW LEVEL SECURITY")
     get_supabase()
 
 

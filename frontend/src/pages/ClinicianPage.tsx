@@ -30,27 +30,23 @@ interface PatientData {
 const PATIENTS = [
   {
     id: 'mock-oncology-123',
-    label: 'Elena Vasquez — Breast cancer, stage III (Mock)',
+    label: 'Tan Mei Ling — Breast cancer, stage III (Mock)',
   },
   {
     id: 'mock-cardiology-456',
-    label: 'Marcus Thompson — Heart failure, T2DM (Mock)',
+    label: 'Lim Chong Wei — Heart failure, T2DM, hypertension (Mock)',
   },
   {
     id: 'mock-pediatric-789',
-    label: 'Lily Chen — Paediatric ALL maintenance (Mock)',
+    label: 'Chen Mei Xin — Paediatric ALL, neutropenia (Mock)',
   },
   {
     id: 'mock-neurology-101',
-    label: 'Amara Osei — Relapsing-remitting MS (Mock)',
+    label: 'Priya d/o Krishnan — Relapsing-remitting MS (Mock)',
   },
   {
     id: 'mock-geriatric-202',
-    label: 'Robert Kim — Alzheimer\'s, AFib, osteoporosis (Mock)',
-  },
-  {
-    id: 'eovIMNNn7tHBQwLGAXNRRw3',
-    label: 'eovIMNNn7tHBQwLGAXNRRw3 (Epic Open Sandbox)',
+    label: "Goh Swee Huat — Alzheimer's, AFib, osteoporosis (Mock)",
   },
 ];
 

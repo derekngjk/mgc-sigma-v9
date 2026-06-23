@@ -1,10 +1,8 @@
 import os
 
-import jwt
+import httpx
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-
-_SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 
 _bearer = HTTPBearer()
 
@@ -12,18 +10,26 @@ _bearer = HTTPBearer()
 def verify_clinician_token(
     credentials: HTTPAuthorizationCredentials = Security(_bearer),
 ) -> dict:
-    """FastAPI dependency — validates a Supabase-issued JWT and returns the payload."""
-    if not _SUPABASE_JWT_SECRET:
-        raise HTTPException(status_code=503, detail="Auth not configured (SUPABASE_JWT_SECRET missing)")
+    """FastAPI dependency — validates the token against Supabase Auth API."""
+    supabase_url = os.getenv("SUPABASE_URL", "")
+    supabase_key = os.getenv("SUPABASE_KEY", "")
+
+    if not supabase_url or not supabase_key:
+        raise HTTPException(status_code=503, detail="Auth not configured (SUPABASE_URL/KEY missing)")
+
     try:
-        payload: dict = jwt.decode(
-            credentials.credentials,
-            _SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            audience="authenticated",
+        response = httpx.get(
+            f"{supabase_url}/auth/v1/user",
+            headers={
+                "Authorization": f"Bearer {credentials.credentials}",
+                "apikey": supabase_key,
+            },
+            timeout=5.0,
         )
-        return payload
-    except jwt.ExpiredSignatureError as exc:
-        raise HTTPException(status_code=401, detail="Token has expired") from exc
-    except jwt.InvalidTokenError as exc:
-        raise HTTPException(status_code=401, detail="Invalid token") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503, detail="Could not reach auth service") from exc
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    return response.json()
