@@ -1,8 +1,7 @@
 """Tests for db.get_translation and db.set_translation."""
 
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
-import pytest
 
 import db
 
@@ -11,11 +10,15 @@ import db
 
 
 def test_get_translation_returns_none_when_record_missing(mock_supabase) -> None:
-    mock_supabase.table("care_plan_translations").execute.return_value = MagicMock(data=[])
+    mock_supabase.table("care_plan_translations").execute.return_value = MagicMock(
+        data=[]
+    )
     assert db.get_translation("nonexistent-id", "zh") is None
 
 
-def test_get_translation_returns_none_when_translations_json_null(mock_supabase) -> None:
+def test_get_translation_returns_none_when_translations_json_null(
+    mock_supabase,
+) -> None:
     mock_supabase.table("care_plan_translations").execute.return_value = MagicMock(
         data=[{"translations_json": None}]
     )
@@ -51,8 +54,8 @@ def test_get_translation_handles_json_string(mock_supabase) -> None:
 
 def test_set_translation_writes_new_language(mock_supabase) -> None:
     mock_supabase.table("care_plan_translations").execute.side_effect = [
-        MagicMock(data=[{"translations_json": {}}]),   # select
-        MagicMock(data=[{"id": "comm-1"}]),            # update
+        MagicMock(data=[{"translations_json": {}}]),  # select
+        MagicMock(data=[{"id": "comm-1"}]),  # update
     ]
     db.set_translation("comm-1", "zh", "谭美玲被诊断患有癌症。")
     mock_supabase.table("care_plan_translations").update.assert_called_once_with(
@@ -64,15 +67,22 @@ def test_set_translation_preserves_existing_languages(mock_supabase) -> None:
     existing = {"ms": "Pelan rawatan telah bermula."}
     mock_supabase.table("care_plan_translations").execute.side_effect = [
         MagicMock(data=[{"translations_json": existing}]),  # select
-        MagicMock(data=[{"id": "comm-1"}]),                 # update
+        MagicMock(data=[{"id": "comm-1"}]),  # update
     ]
     db.set_translation("comm-1", "zh", "谭美玲被诊断患有癌症。")
     mock_supabase.table("care_plan_translations").update.assert_called_once_with(
-        {"translations_json": {"ms": "Pelan rawatan telah bermula.", "zh": "谭美玲被诊断患有癌症。"}}
+        {
+            "translations_json": {
+                "ms": "Pelan rawatan telah bermula.",
+                "zh": "谭美玲被诊断患有癌症。",
+            }
+        }
     )
 
 
 def test_set_translation_noop_when_record_missing(mock_supabase) -> None:
-    mock_supabase.table("care_plan_translations").execute.return_value = MagicMock(data=[])
+    mock_supabase.table("care_plan_translations").execute.return_value = MagicMock(
+        data=[]
+    )
     db.set_translation("nonexistent-id", "zh", "text")
     mock_supabase.table("care_plan_translations").update.assert_not_called()

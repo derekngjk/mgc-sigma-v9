@@ -46,7 +46,10 @@ def test_approve_returns_200(
                     "patient_id": "patient-uuid-1",
                     "status": "Approved",
                     "approved_at": "2023-01-01T00:00:00Z",
-                    "patients": {"patient_name": "Tan Mei Ling", "epic_patient_id": "mock-oncology-123"},
+                    "patients": {
+                        "patient_name": "Tan Mei Ling",
+                        "epic_patient_id": "mock-oncology-123",
+                    },
                 }
             ]
         ),

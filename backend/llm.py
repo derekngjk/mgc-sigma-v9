@@ -90,9 +90,32 @@ _SYSTEM_PROMPT = (
     "empathetic language that a {target_audience} can understand. "
     "Use a relatable everyday analogy to explain the main condition. "
     "Write in a warm, supportive tone. Avoid medical jargon. "
-    "Keep the response to 3-4 short paragraphs. "
     "Return plain text only — do not use Markdown, bullet points, headers, or bold formatting."
 )
+
+# Length → word-count target and structural guidance injected into each prompt.
+_LENGTH_INSTRUCTIONS: dict[str, str] = {
+    "short": (
+        "Length: 1-2 paragraphs, approximately 80-120 words. "
+        "Cover only: (1) the main diagnosis in plain language, "
+        "(2) the key treatment in one sentence. Omit all other detail."
+    ),
+    "medium": (
+        "Length: 3-4 paragraphs, approximately 200-280 words. "
+        "Cover: (1) the main diagnosis with a brief everyday analogy, "
+        "(2) the treatment plan, (3) what the patient/family can expect next, "
+        "(4) a short supportive closing."
+    ),
+    "long": (
+        "Length: 5-6 paragraphs, approximately 380-480 words. "
+        "Cover: (1) the main diagnosis with a relatable everyday analogy, "
+        "(2) detailed treatment plan and why each step matters, "
+        "(3) notable condition changes since the last report, "
+        "(4) side effects or things to watch out for, "
+        "(5) practical next steps or support resources, "
+        "(6) an empathetic closing."
+    ),
+}
 
 
 class LLMError(Exception): ...
@@ -105,7 +128,12 @@ def generate_summary(
     raw_clinical_text: str,
     target_audience: str,
     condition_diff: dict | None = None,
+    length: str = "medium",
 ) -> str:
+    length_instruction = _LENGTH_INSTRUCTIONS.get(
+        length, _LENGTH_INSTRUCTIONS["medium"]
+    )
+
     diff_section = ""
     if condition_diff:
         added = condition_diff.get("added", [])
@@ -127,7 +155,8 @@ def generate_summary(
                 "\n\nChanges since last report: please mention these changes clearly."
             )
     prompt = (
-        f"{_SYSTEM_PROMPT.format(target_audience=target_audience)}"
+        f"{_SYSTEM_PROMPT.format(target_audience=target_audience)}\n\n"
+        f"{length_instruction}"
         f"{diff_section}\n\n"
         f"Clinical data (JSON):\n{raw_clinical_text}\n\n"
         f"Please translate this for a {target_audience}."

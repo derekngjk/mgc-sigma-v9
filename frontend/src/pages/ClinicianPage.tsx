@@ -57,6 +57,14 @@ const AUDIENCE_OPTIONS = [
   { value: 'patient', label: 'Patient' },
 ];
 
+type ReportLength = 'short' | 'medium' | 'long';
+
+const LENGTH_OPTIONS: { value: ReportLength; label: string; description: string }[] = [
+  { value: 'short', label: 'Short', description: '~100 words · diagnosis + key treatment only' },
+  { value: 'medium', label: 'Medium', description: '~250 words · diagnosis, treatment plan, what to expect' },
+  { value: 'long', label: 'Long', description: '~450 words · full detail with changes, side effects, next steps' },
+];
+
 // ── sub-components ────────────────────────────────────────────────────────────
 
 function Spinner() {
@@ -150,11 +158,13 @@ function ClinicalDataPanel({ patient }: { patient: PatientData }) {
 interface AiDraftPanelProps {
   stage: Stage;
   audience: string;
+  length: ReportLength;
   draftText: string;
   fetchError: string | null;
   generateError: string | null;
   commId: string;
   onAudienceChange: (v: string) => void;
+  onLengthChange: (v: ReportLength) => void;
   onDraftChange: (v: string) => void;
   onGenerate: () => void;
   onApprove: () => void;
@@ -163,11 +173,13 @@ interface AiDraftPanelProps {
 function AiDraftPanel({
   stage,
   audience,
+  length,
   draftText,
   fetchError,
   generateError,
   commId,
   onAudienceChange,
+  onLengthChange,
   onDraftChange,
   onGenerate,
   onApprove,
@@ -218,6 +230,31 @@ function AiDraftPanel({
           </button>
         </div>
 
+        {/* Report length toggle */}
+        <div className="mb-3">
+          <p className="mb-1.5 text-xs font-medium text-slate-500">Report length</p>
+          <div className="flex gap-1.5">
+            {LENGTH_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => onLengthChange(opt.value)}
+                disabled={isGenerating}
+                title={opt.description}
+                className={`rounded-md border px-3 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  length === opt.value
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-indigo-300 hover:text-indigo-600'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+            <span className="ml-2 self-center text-xs text-slate-400">
+              {LENGTH_OPTIONS.find((o) => o.value === length)?.description}
+            </span>
+          </div>
+        </div>
+
         {generateError && <ErrorBanner message={generateError} />}
         {fetchError && <ErrorBanner message={fetchError} />}
 
@@ -265,6 +302,7 @@ export default function ClinicianPage({ session }: { session: Session }) {
   const [stage, setStage] = useState<Stage>('idle');
   const [patient, setPatient] = useState<PatientData | null>(null);
   const [audience, setAudience] = useState('family');
+  const [length, setLength] = useState<ReportLength>('medium');
   const [draftText, setDraftText] = useState('');
   const [commId, setCommId] = useState('');
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -307,7 +345,7 @@ export default function ClinicianPage({ session }: { session: Session }) {
       const res = await fetch(`${API_BASE}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader },
-        body: JSON.stringify({ comm_id: commId, target_audience: audience }),
+        body: JSON.stringify({ comm_id: commId, target_audience: audience, length }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { detail?: string };
@@ -532,11 +570,13 @@ ${bodyHtml}
           <AiDraftPanel
             stage={stage}
             audience={audience}
+            length={length}
             draftText={draftText}
             fetchError={null}
             generateError={generateError ?? approveError}
             commId={commId}
             onAudienceChange={setAudience}
+            onLengthChange={setLength}
             onDraftChange={setDraftText}
             onGenerate={handleGenerate}
             onApprove={handleApprove}

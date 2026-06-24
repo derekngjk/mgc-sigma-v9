@@ -207,16 +207,13 @@ def get_latest_approved_communication(epic_patient_id: str) -> Optional[dict]:
 def get_or_create_family(patient_id: str) -> str:
     """Return existing family_id for this patient, or create one."""
     supabase = get_supabase()
-    res = (
-        supabase.table("families")
-        .select("id")
-        .eq("patient_id", patient_id)
-        .execute()
-    )
+    res = supabase.table("families").select("id").eq("patient_id", patient_id).execute()
     if res.data:
         return res.data[0]["id"]
     family_id = str(uuid.uuid4())
-    supabase.table("families").insert({"id": family_id, "patient_id": patient_id}).execute()
+    supabase.table("families").insert(
+        {"id": family_id, "patient_id": patient_id}
+    ).execute()
     return family_id
 
 
@@ -233,12 +230,14 @@ def get_or_create_primary_member(family_id: str, name: str) -> str:
     if res.data:
         return res.data[0]["id"]
     member_id = str(uuid.uuid4())
-    supabase.table("family_members").insert({
-        "id": member_id,
-        "family_id": family_id,
-        "name": name,
-        "relationship": "patient",
-    }).execute()
+    supabase.table("family_members").insert(
+        {
+            "id": member_id,
+            "family_id": family_id,
+            "name": name,
+            "relationship": "patient",
+        }
+    ).execute()
     return member_id
 
 
@@ -257,10 +256,7 @@ def get_family_summary(family_id: str, member_id: str) -> Optional[dict]:
         return None
 
     family_res = (
-        supabase.table("families")
-        .select("patient_id")
-        .eq("id", family_id)
-        .execute()
+        supabase.table("families").select("patient_id").eq("id", family_id).execute()
     )
     if not family_res.data:
         return None
@@ -284,6 +280,7 @@ def get_family_summary(family_id: str, member_id: str) -> Optional[dict]:
     record["epic_patient_id"] = patient.get("epic_patient_id", "")
 
     import json
+
     if isinstance(record.get("conditions_json"), (list, dict)):
         record["conditions_json"] = json.dumps(record["conditions_json"])
     if isinstance(record.get("condition_diff"), (list, dict)):

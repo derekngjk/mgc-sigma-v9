@@ -15,7 +15,9 @@ def verify_clinician_token(
     supabase_key = os.getenv("SUPABASE_KEY", "")
 
     if not supabase_url or not supabase_key:
-        raise HTTPException(status_code=503, detail="Auth not configured (SUPABASE_URL/KEY missing)")
+        raise HTTPException(
+            status_code=503, detail="Auth not configured (SUPABASE_URL/KEY missing)"
+        )
 
     try:
         response = httpx.get(
@@ -27,7 +29,9 @@ def verify_clinician_token(
             timeout=5.0,
         )
     except httpx.RequestError as exc:
-        raise HTTPException(status_code=503, detail="Could not reach auth service") from exc
+        raise HTTPException(
+            status_code=503, detail="Could not reach auth service"
+        ) from exc
 
     if response.status_code != 200:
         raise HTTPException(status_code=401, detail="Invalid or expired token")

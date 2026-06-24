@@ -70,9 +70,13 @@ class PatientResponse(BaseModel):
     condition_diff: ConditionDiff
 
 
+_VALID_LENGTHS = {"short", "medium", "long"}
+
+
 class GenerateRequest(BaseModel):
     comm_id: str
     target_audience: str = "family"
+    length: str = "medium"
 
 
 class GenerateResponse(BaseModel):
@@ -164,6 +168,10 @@ def generate(
     req: GenerateRequest,
     _: dict = Depends(verify_clinician_token),
 ) -> GenerateResponse:
+    if req.length not in _VALID_LENGTHS:
+        raise HTTPException(
+            status_code=400, detail=f"length must be one of: {sorted(_VALID_LENGTHS)}"
+        )
     record = get_communication(req.comm_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Communication record not found")
@@ -172,7 +180,7 @@ def generate(
     )
     try:
         summary = generate_summary(
-            record["raw_clinical_text"], req.target_audience, condition_diff
+            record["raw_clinical_text"], req.target_audience, condition_diff, req.length
         )
     except LLMConfigError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
@@ -196,7 +204,9 @@ def get_family_view(
     lang: str = Query(default="en"),
 ) -> FamilyViewResponse:
     if lang not in _VALID_LANGS:
-        raise HTTPException(status_code=400, detail=f"lang must be one of: {sorted(_VALID_LANGS)}")
+        raise HTTPException(
+            status_code=400, detail=f"lang must be one of: {sorted(_VALID_LANGS)}"
+        )
     record = get_communication(comm_id)
     if record is None or record["status"] != "Approved":
         raise HTTPException(
@@ -254,14 +264,18 @@ def approve_communication(
     )
 
 
-@app.get("/api/family/{family_id}/member/{member_id}", response_model=FamilyViewResponse)
+@app.get(
+    "/api/family/{family_id}/member/{member_id}", response_model=FamilyViewResponse
+)
 def get_family_member_view(
     family_id: str,
     member_id: str,
     lang: str = Query(default="en"),
 ) -> FamilyViewResponse:
     if lang not in _VALID_LANGS:
-        raise HTTPException(status_code=400, detail=f"lang must be one of: {sorted(_VALID_LANGS)}")
+        raise HTTPException(
+            status_code=400, detail=f"lang must be one of: {sorted(_VALID_LANGS)}"
+        )
     record = get_family_summary(family_id, member_id)
     if record is None:
         raise HTTPException(
