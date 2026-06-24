@@ -53,8 +53,10 @@ const PATIENTS = [
 ];
 
 const AUDIENCE_OPTIONS = [
-  { value: 'family', label: 'Family' },
-  { value: 'patient', label: 'Patient' },
+  { value: 'patient', label: 'Patient (self)' },
+  { value: 'spouse', label: 'Spouse / Partner' },
+  { value: 'child', label: 'Adult Child' },
+  { value: 'caregiver', label: 'Caregiver' },
 ];
 
 type ReportLength = 'short' | 'medium' | 'long';
@@ -301,7 +303,7 @@ export default function ClinicianPage({ session }: { session: Session }) {
   const [selectedPatientId, setSelectedPatientId] = useState(PATIENTS[0].id);
   const [stage, setStage] = useState<Stage>('idle');
   const [patient, setPatient] = useState<PatientData | null>(null);
-  const [audience, setAudience] = useState('family');
+  const [audience, setAudience] = useState('patient');
   const [length, setLength] = useState<ReportLength>('medium');
   const [draftText, setDraftText] = useState('');
   const [commId, setCommId] = useState('');

@@ -535,39 +535,111 @@ After a clinician approves a summary, the success card on the clinician dashboar
 
 ---
 
+## Feature 9 — Audience-Specific Reports
+
+**Files:** `backend/llm.py`, `backend/db.py`, `backend/main.py`, `frontend/src/pages/ClinicianPage.tsx`, `backend/tests/test_task_3_1.py`
+
+### What was built
+
+The `target_audience` field was expanded from a binary `"patient" | "family"` toggle to four specific recipient types: `"patient"`, `"spouse"`, `"child"`, `"caregiver"`. Each type has a distinct LLM prompt instruction block that shapes tone, framing, and content focus. The clinician selects the intended recipient before generating — the resulting summary and approval link are specific to that person. Running the flow twice for the same patient (once for `"patient"`, once for `"spouse"`) produces two separately written summaries, each with their own unique `/family/:fid/member/:mid` link.
+
+### Why audience-specific, not just "family"
+
+The original `"family"` option was too broad. A spouse supporting a partner through chemotherapy needs different information than an adult child managing a parent's care from a distance, which is again different from a hired caregiver monitoring daily symptoms. Collapsing these into one prompt produced generic text that was neither emotionally appropriate nor practically useful for any specific reader. The audience-specific model lets the LLM tune:
+
+- **patient** — second-person ("you"), empowering, focuses on what the patient is experiencing and what their team is doing
+- **spouse** — third-person about the patient, emphasises shared emotional burden, practical caregiving tips, and when to call the team
+- **child** — acknowledges the parent-child role reversal, balances practical support with emotional reassurance
+- **caregiver** — most clinical of the four; prioritises symptoms to monitor, red-flag signs, and actionable daily guidance over emotional framing
+
+### LLM prompt decisions
+
+**`_SYSTEM_PROMPT_BASE` + `_AUDIENCE_INSTRUCTIONS` dict:** The previous single `_SYSTEM_PROMPT` string used `.format(target_audience=target_audience)` to interpolate the audience label. This produced text like "empathetic language that a family can understand" — a weak instruction that the model largely ignored. Replacing it with a dedicated `_AUDIENCE_INSTRUCTIONS` dict gives each audience type a full paragraph of specific framing guidance, which produces measurably more differentiated output.
+
+**`VALID_AUDIENCES` exported from `llm.py`:** The set of valid audience values lives in `llm.py` alongside the prompt logic that depends on it — not duplicated in `main.py`. `main.py` imports and uses it for route validation. This means adding a new audience type in the future requires one change (adding an entry to `_AUDIENCE_INSTRUCTIONS`) rather than two.
+
+**Markdown formatting enabled in base prompt:** The old `_SYSTEM_PROMPT` ended with "Return plain text only — do not use Markdown". This was a holdover from before `markdownToHtml` and the print window existed. It was removed; the base prompt now explicitly asks for `**bold**`, `## headings`, and `- lists`, consistent with how the family viewer already renders output.
+
+### DB and route decisions
+
+**`create_family_member` is non-idempotent; `get_or_create_primary_member` stays idempotent:** The `"patient"` audience maps to the existing idempotent primary-member creation — re-approving a patient-targeted summary reuses the same stable link. All other audience types call the new `create_family_member`, which always inserts a fresh row. This is intentional: a family might have two adult children who each need their own link, and idempotency on `relationship="child"` would incorrectly collapse them. The clinician runs the full generate-and-approve flow once per intended recipient.
+
+**`_AUDIENCE_MEMBER_NAMES` inline in the route:** The mapping from audience value to display name (`"spouse" → "Spouse / Partner"` etc.) lives inline in `approve_communication` rather than in `db.py`. It is presentation logic (what name appears on the `family_members` row for identification) and does not belong in the data layer.
+
+**`GenerateRequest.target_audience` default changed to `"patient"`:** The old default of `"family"` became invalid. `"patient"` is the most common clinical use-case and the safest default — a summary written for the patient is appropriate for the patient to also share with family if they choose.
+
+### Testing decisions
+
+**Existing `test_task_3_1.py` tests updated:** Both generate tests previously omitted `target_audience`, relying on the `"family"` default. They were updated to pass `"patient"` explicitly. This is the right level of precision — the tests are verifying generate-path behaviour, not audience logic, so a valid concrete value is better than relying on a default.
+
+**No new prompt-content tests for audience framing:** The audience instruction strings are long-form prose injected into the prompt. Testing that a specific word appears in the prompt (as done for `condition_diff` injection) would be brittle — any wording change would break the test. The correct validation of audience-specific output is a human judgement call during demo review, not an assertion over prompt text.
+
+---
+
 ## Feature Roadmap & TODOs
 
 The following core features are required to align the current proof-of-concept with the target functional architecture:
 
 1. **Database Migration to Supabase (HIPAA Compliant)** ✅
-   * Migrate the local SQLite schema to Supabase (Postgres).
-   * Establish tables for `patients` and `care_plan_translations`. (Next: `profiles`, `clinics`, `families`).
+   - Migrate the local SQLite schema to Supabase (Postgres).
+   - Establish tables for `patients` and `care_plan_translations`. (Next: `profiles`, `clinics`, `families`).
 
 2. **Update Family Access Route** ✅
-   * Refactor the frontend router and backend endpoints to use the secure, structured `/family/:fid/member/:mid` path.
-   * Implement token-based validation for family member access.
+   - Refactor the frontend router and backend endpoints to use the secure, structured `/family/:fid/member/:mid` path.
+   - Implement token-based validation for family member access.
 
 3. **Multilingual Translation** ✅
-   * Integrate translation services to translate approved summaries into Singapore's official languages: English (EN), Chinese (ZH), Malay (MS), and Tamil (TA).
-   * Incorporate a clinical glossary to ensure translation accuracy of medical terms.
+   - Integrate translation services to translate approved summaries into Singapore's official languages: English (EN), Chinese (ZH), Malay (MS), and Tamil (TA).
+   - Incorporate a clinical glossary to ensure translation accuracy of medical terms.
 
 4. **Text-to-Speech (TTS) Generation**
-   * Integrate a TTS engine to synthesize audio (MP3) of the translated summaries.
-   * Store generated audio files in Supabase Storage or AWS S3.
+    - Integrate a TTS engine (e.g. OpenAI `tts-1`, ElevenLabs, or Azure Neural TTS) to synthesise audio (MP3) of the approved summary in each supported language.
+    - Store generated audio in Supabase Storage (or S3); cache like translations — generate on first request, serve from cache thereafter.
+    - Expose via a new `GET /api/family/{fid}/member/{mid}/audio?lang=` endpoint that returns a signed URL to the audio file.
 
 5. **Visual Aid Generation (Nano Banana)**
-   * Integrate an image generation model (e.g., Gemini 2.5 Flash Image) to generate supportive visual illustrations for the patient care plan.
-   * Store and serve these images alongside the summaries.
+    - Integrate an image generation model (e.g. Gemini 2.5 Flash Image, DALL-E 3) to produce a supportive illustration for the care plan.
+    - Store and serve images alongside summaries. Consider one image per summary (generated at approval time, not lazily) to avoid UX delay on the family viewer.
 
 6. **Audio Playback & Visuals in Family Viewer**
-   * Update the mobile-first Family Viewer page to include an audio player component for TTS playback.
-   * Add an image viewer component to display the generated visual aids.
+    - Add an audio player component (`<audio>` element or a custom play/pause bar) in `FamilyPage.tsx` below the summary text, conditionally rendered when a TTS audio URL is available.
+    - Add an image viewer component (lightbox or inline) for the visual aid.
+    - Both should respect the current language selection (TTS audio must match the displayed language).
 
-7. **Clinician Authentication (AuthGate)**
-   * Implement Supabase Auth on the frontend to gate clinician access.
-   * Add JWT verification middleware on the backend to secure clinician-only endpoints.
+7. **Clinician Authentication (AuthGate)** ✅
+   - Supabase magic-link (passwordless email) auth on the frontend.
+   - `AuthGate` component guards the `/clinician` route, redirecting unauthenticated users to `/login`.
+   - `verify_clinician_token` FastAPI dependency validates the Supabase JWT on all clinician-only endpoints (`/api/patient/*`, `/api/generate`, `/api/communications/*/approve`).
 
 8. **Delivery Stub** ✅
-   * QR code on the clinician approval success card for point-of-care handoff.
-   * Print Handout on the clinician dashboard and Print Summary on the family viewer, both using a Blob-based print window with UTF-8 encoding for CJK support.
-   * A−/A+ font size controls on the family viewer; chosen size is preserved in the print output.
+   - QR code on the clinician approval success card for point-of-care handoff.
+   - Print Handout on the clinician dashboard and Print Summary on the family viewer, both using a Blob-based print window with UTF-8 encoding for CJK support.
+   - A−/A+ font size controls on the family viewer; chosen size is preserved in the print output.
+
+9. **Audience-Specific Reports (Multi-Member Family Access)** ✅
+   - Expanded `target_audience` from `"patient" | "family"` to four specific recipient types: `"patient"`, `"spouse"`, `"child"`, `"caregiver"`.
+   - Each audience type has a distinct LLM prompt instruction block. Each approval produces a separately written summary with its own unique family member link.
+
+10. **Patient Acknowledgment Tracking**
+    - Log a timestamped event when the family viewer is opened (first load of `GET /api/family/{fid}/member/{mid}`) and when the Print Summary button is used.
+    - A lightweight `access_log` table (`family_member_id`, `event` enum `opened|printed`, `lang`, `occurred_at`) is sufficient.
+    - Clinicians could then see "last opened by family: 3 hours ago" on a future dashboard without storing any PHI beyond the existing IDs.
+
+11. **Audit Trail**
+    - Currently `approved_at` is the only audit field. A production deployment requires: which clinician approved (Supabase Auth `user_id`), which patient, and timestamps for each LLM generation call.
+    - Add `approved_by_user_id` (UUID FK to Supabase Auth `auth.users`) to `care_plan_translations`, populated from the verified JWT in the approve route.
+    - No changes to existing behaviour — purely additive columns.
+
+---
+
+## Known Test Gaps
+
+The following areas lack automated test coverage and carry regression risk:
+
+| Area | Gap | Risk |
+| --- | --- | --- |
+| `frontend/src/lib/markdown.ts` | No unit tests. Edge cases (nested bold/italic, mixed heading levels, empty input) are untested. | Markdown regressions in web view and print output are invisible until a demo. |
+| Frontend integration (E2E) | No Playwright / Cypress tests. `ClinicianPage` and `FamilyPage` flow logic is exercised only by manual testing. | A backend API contract change could silently break the UI. |
+| Auth edge cases | No tests for session expiry mid-workflow, double-tap Approve, or token refresh. | A clinician could lose work or trigger a duplicate approval if their session expires mid-flow. |
+| Translation glossary injection | The `_CLINICAL_GLOSSARY` entries in `llm.py` are present but not asserted to appear in the translation prompt string. | A refactor of `translate_summary` could silently drop the glossary without any test failing. |
+| Print window | No test for QR code SVG generation, print window DOM structure, or CJK font fallback stack. | Print regressions only surface at demo time on a real device. |

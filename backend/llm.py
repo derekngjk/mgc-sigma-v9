@@ -84,14 +84,45 @@ _CLINICAL_GLOSSARY: dict[str, dict[str, str]] = {
     },
 }
 
-_SYSTEM_PROMPT = (
-    "You are a medical translator helping patients and their families understand "
-    "complex clinical information. Translate the clinical data provided into clear, "
-    "empathetic language that a {target_audience} can understand. "
+VALID_AUDIENCES = {"patient", "spouse", "child", "caregiver"}
+
+_SYSTEM_PROMPT_BASE = (
+    "You are a medical communicator helping people understand complex clinical information. "
+    "Translate the clinical data provided into clear, empathetic language. "
     "Use a relatable everyday analogy to explain the main condition. "
-    "Write in a warm, supportive tone. Avoid medical jargon. "
-    "Return plain text only — do not use Markdown, bullet points, headers, or bold formatting."
+    "Avoid medical jargon. Use Markdown formatting: **bold** for key terms, "
+    "## headings for sections, and - bullet points for lists where appropriate."
 )
+
+# Audience-specific tone and framing instructions.
+_AUDIENCE_INSTRUCTIONS: dict[str, str] = {
+    "patient": (
+        "Write directly to the patient using 'you' and 'your'. "
+        "Be empowering and reassuring — the patient is the focus of care. "
+        "Explain what is happening in their body, what the care team is doing, "
+        "and what they can expect. Use a warm, first-person tone throughout."
+    ),
+    "spouse": (
+        "Write to the patient's spouse or partner using 'your partner' or 'your loved one'. "
+        "Explain the patient's condition in the third person. "
+        "Focus on how the spouse can provide emotional support, what to expect at home, "
+        "practical caregiving tips, and when to contact the care team. "
+        "Acknowledge the difficulty of supporting a loved one through this."
+    ),
+    "child": (
+        "Write to the patient's adult child using 'your parent' or 'your mum / dad'. "
+        "Explain the condition clearly without being overly clinical. "
+        "Focus on how the adult child can support their parent, what changes to expect "
+        "in daily life, and how to balance caregiving with their own wellbeing. "
+        "Be emotionally sensitive — this is a difficult role reversal."
+    ),
+    "caregiver": (
+        "Write to a professional or family caregiver in a clear, practical tone. "
+        "Cover: what symptoms to monitor daily, red-flag signs that require urgent attention, "
+        "medication or treatment schedule context, mobility or comfort considerations, "
+        "and who to call for help. Prioritise actionable information over emotional framing."
+    ),
+}
 
 # Length → word-count target and structural guidance injected into each prompt.
 _LENGTH_INSTRUCTIONS: dict[str, str] = {
@@ -154,12 +185,15 @@ def generate_summary(
             diff_section += (
                 "\n\nChanges since last report: please mention these changes clearly."
             )
+    audience_instruction = _AUDIENCE_INSTRUCTIONS.get(
+        target_audience, _AUDIENCE_INSTRUCTIONS["patient"]
+    )
     prompt = (
-        f"{_SYSTEM_PROMPT.format(target_audience=target_audience)}\n\n"
+        f"{_SYSTEM_PROMPT_BASE}\n\n"
+        f"Audience: {audience_instruction}\n\n"
         f"{length_instruction}"
         f"{diff_section}\n\n"
-        f"Clinical data (JSON):\n{raw_clinical_text}\n\n"
-        f"Please translate this for a {target_audience}."
+        f"Clinical data (JSON):\n{raw_clinical_text}"
     )
     return _call_llm(prompt)
 

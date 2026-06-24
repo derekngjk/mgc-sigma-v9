@@ -241,6 +241,16 @@ def get_or_create_primary_member(family_id: str, name: str) -> str:
     return member_id
 
 
+def create_family_member(family_id: str, name: str, relationship: str) -> str:
+    """Insert a new family member row and return its id. Not idempotent — always inserts."""
+    supabase = get_supabase()
+    member_id = str(uuid.uuid4())
+    supabase.table("family_members").insert(
+        {"id": member_id, "family_id": family_id, "name": name, "relationship": relationship}
+    ).execute()
+    return member_id
+
+
 def get_family_summary(family_id: str, member_id: str) -> Optional[dict]:
     """Validate fid+mid belong together, then return the latest approved summary."""
     supabase = get_supabase()

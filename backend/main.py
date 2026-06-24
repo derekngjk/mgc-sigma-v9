@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from db import (
     create_communication,
+    create_family_member,
     get_communication,
     get_family_summary,
     get_latest_approved_communication,
@@ -20,7 +21,7 @@ from db import (
 )
 from fhir import FHIRError, PatientNotFoundError, fetch_patient_data
 from auth import verify_clinician_token
-from llm import LLMConfigError, LLMError, generate_summary, translate_summary
+from llm import LLMConfigError, LLMError, VALID_AUDIENCES, generate_summary, translate_summary
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -75,7 +76,7 @@ _VALID_LENGTHS = {"short", "medium", "long"}
 
 class GenerateRequest(BaseModel):
     comm_id: str
-    target_audience: str = "family"
+    target_audience: str = "patient"
     length: str = "medium"
 
 
@@ -172,6 +173,10 @@ def generate(
         raise HTTPException(
             status_code=400, detail=f"length must be one of: {sorted(_VALID_LENGTHS)}"
         )
+    if req.target_audience not in VALID_AUDIENCES:
+        raise HTTPException(
+            status_code=400, detail=f"target_audience must be one of: {sorted(VALID_AUDIENCES)}"
+        )
     record = get_communication(req.comm_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Communication record not found")
@@ -256,7 +261,18 @@ def approve_communication(
     updated = get_communication(comm_id)
     patient_id = updated.get("patient_id", "")
     fid = get_or_create_family(patient_id)
-    mid = get_or_create_primary_member(fid, updated.get("patient_name", ""))
+
+    audience = updated.get("target_audience", "patient")
+    _AUDIENCE_MEMBER_NAMES = {
+        "spouse": "Spouse / Partner",
+        "child": "Adult Child",
+        "caregiver": "Caregiver",
+    }
+    if audience == "patient":
+        mid = get_or_create_primary_member(fid, updated.get("patient_name", ""))
+    else:
+        mid = create_family_member(fid, _AUDIENCE_MEMBER_NAMES.get(audience, audience), audience)
+
     return ApproveResponse(
         id=comm_id,
         approved_at=updated["approved_at"],
