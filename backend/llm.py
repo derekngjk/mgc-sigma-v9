@@ -90,7 +90,8 @@ _SYSTEM_PROMPT = (
     "empathetic language that a {target_audience} can understand. "
     "Use a relatable everyday analogy to explain the main condition. "
     "Write in a warm, supportive tone. Avoid medical jargon. "
-    "Keep the response to 3-4 short paragraphs."
+    "Keep the response to 3-4 short paragraphs. "
+    "Return plain text only — do not use Markdown, bullet points, headers, or bold formatting."
 )
 
 
@@ -154,16 +155,19 @@ def translate_summary(text: str, lang: str) -> str:
         f"Translate the following patient health summary from English into {lang_name}.\n\n"
         "Rules:\n"
         "- Preserve the warm, empathetic tone exactly.\n"
-        "- Keep the same paragraph structure.\n"
+        "- Keep the same paragraph and heading structure (separate paragraphs with a blank line).\n"
+        "- Preserve all Markdown formatting markers exactly as they appear: **bold**, *italic*, ## headings, - list items.\n"
         "- Use the medical term translations listed below for consistency.\n"
-        "- Return only the translated text, with no explanations or headings.\n\n"
+        "- Return only the translated text. No explanations, no added commentary.\n\n"
         f"Medical term reference (use these translations):\n{glossary_lines}\n\n"
         f"Summary to translate:\n{text}"
     )
-    return _call_llm(prompt)
+    # Tamil and Malay scripts are token-heavy (Tamil Unicode chars cost 2-4 tokens
+    # each in most tokenizers), so translations need more headroom than summaries.
+    return _call_llm(prompt, max_tokens=4096)
 
 
-def _call_llm(prompt: str) -> str:
+def _call_llm(prompt: str, max_tokens: int = 1024) -> str:
     if LLM_PROVIDER == "anthropic":
         if not ANTHROPIC_API_KEY:
             raise LLMConfigError("ANTHROPIC_API_KEY is not set")
@@ -172,7 +176,7 @@ def _call_llm(prompt: str) -> str:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         message = client.messages.create(
             model=ANTHROPIC_MODEL,
-            max_tokens=1024,
+            max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
         return message.content[0].text
@@ -185,7 +189,7 @@ def _call_llm(prompt: str) -> str:
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=1024,
+            max_tokens=max_tokens,
         )
         return response.choices[0].message.content
     elif LLM_PROVIDER == "google":

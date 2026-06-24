@@ -30,7 +30,7 @@ def test_translate_summary_unsupported_lang_raises() -> None:
 def test_translate_summary_calls_llm_and_returns_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(llm, "_call_llm", lambda prompt: MOCK_TRANSLATED)
+    monkeypatch.setattr(llm, "_call_llm", lambda prompt, **_: MOCK_TRANSLATED)
     assert translate_summary(ENGLISH_SUMMARY, "zh") == MOCK_TRANSLATED
 
 
@@ -38,7 +38,7 @@ def test_translate_summary_prompt_contains_target_language(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: list[str] = []
-    monkeypatch.setattr(llm, "_call_llm", lambda p: captured.append(p) or "ok")
+    monkeypatch.setattr(llm, "_call_llm", lambda p, **_: captured.append(p) or "ok")
 
     translate_summary(ENGLISH_SUMMARY, "zh")
     assert "Simplified Chinese" in captured[0]
@@ -54,7 +54,7 @@ def test_translate_summary_prompt_contains_source_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: list[str] = []
-    monkeypatch.setattr(llm, "_call_llm", lambda p: captured.append(p) or "ok")
+    monkeypatch.setattr(llm, "_call_llm", lambda p, **_: captured.append(p) or "ok")
     translate_summary(ENGLISH_SUMMARY, "zh")
     assert ENGLISH_SUMMARY in captured[0]
 
@@ -63,7 +63,7 @@ def test_translate_summary_prompt_contains_glossary_terms(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: list[str] = []
-    monkeypatch.setattr(llm, "_call_llm", lambda p: captured.append(p) or "ok")
+    monkeypatch.setattr(llm, "_call_llm", lambda p, **_: captured.append(p) or "ok")
     translate_summary(ENGLISH_SUMMARY, "zh")
     # Glossary entries for ZH should appear in the prompt.
     assert "化疗" in captured[0]

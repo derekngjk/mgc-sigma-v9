@@ -493,6 +493,48 @@ Approved English summaries can now be read in Singapore's four official language
 
 ---
 
+## Feature 8 — Delivery Stub (QR Code + Print Handout)
+
+**Files:** `frontend/src/pages/ClinicianPage.tsx`, `frontend/src/pages/FamilyPage.tsx`, `frontend/src/lib/markdown.ts`, `frontend/src/index.css`
+
+### What was built
+
+After a clinician approves a summary, the success card on the clinician dashboard now shows a QR code of the family magic link alongside the existing copy-to-clipboard URL. Both the clinician dashboard and the family/patient viewer gained a **Print Handout** / **Print summary** button that opens a dedicated print window containing the formatted summary text (headings, bold, lists preserved), the patient name, and a footer. The family viewer also gained A−/A+ font size controls that carry through into the print output.
+
+### Clinician success card decisions
+
+**QR code via `react-qr-code`:** The library renders a pure SVG — no canvas, no network call, no server-side generation. The SVG is injected directly into the print window so the printed QR code is a vector graphic at full resolution, not a rasterised screenshot.
+
+**Print shows the summary text, not the QR:** The clinician handout is intended as a paper copy of the care summary to give to the patient at the point of care. The QR code is shown on-screen for point-of-care handoff; the printout contains the approved draft text so the clinician has a readable record.
+
+### Family viewer decisions
+
+**Print button placement:** The "Print summary" button is placed below the condition-changes section — after the patient has read the full summary — rather than at the top. This matches the reading order and avoids the button being the first thing a patient sees.
+
+**Font size controls (A− / A+):** Font size steps from 14px to 26px in 2px increments, defaulting to 18px (slightly above browser default for accessibility). The controls sit inline at the right of the language toggle row so they are discoverable without occupying a separate row. The chosen size is passed directly into the print window CSS so the printed PDF reflects exactly what the patient was reading on screen.
+
+### Print window implementation decisions
+
+**`Blob` + `URL.createObjectURL` instead of `document.write`:** `document.write` ignores `<meta charset="utf-8">` because that tag only instructs the browser how to decode bytes from a URL — `document.write` passes an already-decoded JS string and uses a legacy code path that does not respect the charset hint. Creating a `Blob` with `{ type: 'text/html;charset=utf-8' }` forces the browser to decode the blob's bytes as UTF-8 from the start, which correctly renders Chinese, Tamil, and Malay characters.
+
+**Print triggered from inside the document via `window.onload`:** `win.addEventListener('load', ...)` on a cross-origin popup is unreliable — the event may fire before the listener is registered. Injecting `<script>window.onload=function(){window.print()}<\/script>` into the HTML body means the print dialog is triggered from within the document's own execution context, which is universally reliable.
+
+**CJK font fallbacks:** `system-ui` alone dropped Chinese and Tamil glyphs on some systems (particularly Windows, where `system-ui` maps to Segoe UI). The print font stack explicitly includes `'PingFang SC'`, `'Hiragino Sans GB'`, `'Microsoft YaHei'`, and `'Noto Sans CJK SC'` as fallbacks. The same stack is exported from `lib/markdown.ts` as `PRINT_FONT` and shared by both print handlers.
+
+**Shared `lib/markdown.ts`:** `markdownToHtml`, `openPrintWindow`, `PRINT_FONT`, and `stripMarkdown` live in a single shared module imported by both `ClinicianPage` and `FamilyPage`. This ensures both print handlers stay in sync and eliminates the duplicated strip-and-split logic that previously lived inline in each component.
+
+### Markdown rendering decisions
+
+**`dangerouslySetInnerHTML` + `markdownToHtml` for the web view:** An earlier implementation maintained parallel JSX rendering functions (`renderMarkdown`, `renderInline`) alongside the HTML-string `markdownToHtml` used by the print window. This meant two separate renderers had to be kept in sync. Replacing them with a single `markdownToHtml` call and `dangerouslySetInnerHTML` gives both the web view and the print window a single rendering path. The LLM-generated content is not user-supplied input, so the XSS risk is low for a PoC; a production deployment would add DOMPurify sanitisation.
+
+**Headings use `em` units in both web and print CSS:** Absolute `px`/`rem` heading sizes would not scale with the A−/A+ font size control. Switching to `font-size: 1.2em` / `1.1em` means headings always stay proportionally larger than body text regardless of the chosen base size.
+
+**Translation prompt preserves Markdown markers:** The translation prompt instructs the LLM to "preserve all Markdown formatting markers exactly as they appear (`**bold**`, `*italic*`, `## headings`, `- list items`)". Without this, translations stripped all formatting, making the Chinese/Tamil/Malay output visually flat compared to the bolded English original. Keeping the markers ensures `markdownToHtml` produces consistent HTML structure across all languages.
+
+**`max_tokens=4096` for translation calls:** Tamil Unicode characters cost 2–4 tokens each in most LLM tokenizers, and Malay has longer average word lengths than English. The default `max_tokens=1024` caused Malay and Tamil translations to be cut off mid-sentence. Translation calls now pass `max_tokens=4096` to `_call_llm` while summary generation retains the `1024` default. The `_call_llm` signature was updated to accept `max_tokens` as a keyword argument; test mocks were updated to accept `**kwargs` accordingly.
+
+---
+
 ## Feature Roadmap & TODOs
 
 The following core features are required to align the current proof-of-concept with the target functional architecture:
@@ -525,5 +567,7 @@ The following core features are required to align the current proof-of-concept w
    * Implement Supabase Auth on the frontend to gate clinician access.
    * Add JWT verification middleware on the backend to secure clinician-only endpoints.
 
-8. **Delivery Stub**
-   * Implement a utility to generate QR codes and printable magic-link handouts directly from the clinician dashboard at the point of care.
+8. **Delivery Stub** ✅
+   * QR code on the clinician approval success card for point-of-care handoff.
+   * Print Handout on the clinician dashboard and Print Summary on the family viewer, both using a Blob-based print window with UTF-8 encoding for CJK support.
+   * A−/A+ font size controls on the family viewer; chosen size is preserved in the print output.

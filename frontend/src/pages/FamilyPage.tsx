@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { markdownToHtml, openPrintWindow, PRINT_FONT } from '../lib/markdown';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -32,6 +33,7 @@ const LANG_OPTIONS: { code: Lang; label: string }[] = [
 ];
 
 // ── helpers ───────────────────────────────────────────────────────────────────
+
 
 function formatDate(iso: string): string {
   try {
@@ -124,6 +126,9 @@ export default function FamilyPage() {
   const [summaryText, setSummaryText] = useState('');
   const [translating, setTranslating] = useState(false);
   const [translateError, setTranslateError] = useState<string | null>(null);
+  const [fontSize, setFontSize] = useState(18);
+  const MIN_FONT = 14;
+  const MAX_FONT = 26;
 
   useEffect(() => {
     if (!fid || !mid) {
@@ -186,8 +191,8 @@ export default function FamilyPage() {
           </p>
         </div>
 
-        {/* Language toggle */}
-        <div className="mb-6 flex gap-2">
+        {/* Language toggle + font size controls */}
+        <div className="mb-6 flex items-center gap-2">
           {LANG_OPTIONS.map(({ code, label }) => (
             <button
               key={code}
@@ -203,8 +208,26 @@ export default function FamilyPage() {
             </button>
           ))}
           {translating && (
-            <span className="ml-1 inline-block h-5 w-5 self-center animate-spin rounded-full border-2 border-slate-200 border-t-teal-500" />
+            <span className="ml-1 inline-block h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-teal-500" />
           )}
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              onClick={() => setFontSize((s) => Math.max(MIN_FONT, s - 2))}
+              disabled={fontSize <= MIN_FONT}
+              aria-label="Decrease font size"
+              className="flex h-7 w-7 items-center justify-center rounded border border-slate-200 text-sm text-slate-500 hover:border-slate-400 disabled:opacity-30"
+            >
+              A−
+            </button>
+            <button
+              onClick={() => setFontSize((s) => Math.min(MAX_FONT, s + 2))}
+              disabled={fontSize >= MAX_FONT}
+              aria-label="Increase font size"
+              className="flex h-7 w-7 items-center justify-center rounded border border-slate-200 text-base font-medium text-slate-500 hover:border-slate-400 disabled:opacity-30"
+            >
+              A+
+            </button>
+          </div>
         </div>
 
         {translateError && (
@@ -214,19 +237,56 @@ export default function FamilyPage() {
         )}
 
         {/* Summary */}
-        <div className={`prose prose-slate max-w-none transition-opacity ${translating ? 'opacity-40' : 'opacity-100'}`}>
-          {summaryText.split('\n\n').map((para, i) => (
-            <p key={i} className="mb-4 text-base leading-relaxed text-slate-700">
-              {para}
-            </p>
-          ))}
-        </div>
+        <div
+          className={`summary-body transition-opacity ${translating ? 'opacity-40' : 'opacity-100'}`}
+          style={{ fontSize: `${fontSize}px` }}
+          dangerouslySetInnerHTML={{ __html: markdownToHtml(summaryText) }}
+        />
 
         {/* Condition changes */}
         <ChangesSection diff={data.condition_diff} />
 
+        {/* Print */}
+        <div className="mt-8 flex justify-center">
+          <button
+            onClick={() => {
+              const activeLangLabel = LANG_OPTIONS.find((l) => l.code === lang)?.label ?? lang.toUpperCase();
+              const bodyHtml = markdownToHtml(summaryText);
+              openPrintWindow(`<!doctype html><html><head>
+<meta charset="utf-8"/>
+<title>Care Summary — ${data.patient_name}</title>
+<style>
+  body{font-family:${PRINT_FONT};font-size:${fontSize}px;line-height:1.85;padding:2.5rem;color:#1e293b;max-width:600px;margin:0 auto}
+  .title{font-size:1.25rem;font-weight:600;margin:0 0 .25rem}
+  .meta{font-size:.875rem;color:#475569;margin:0 0 .25rem}
+  .lang{display:inline-block;background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4;border-radius:.25rem;font-size:.75rem;padding:.1rem .4rem;margin-left:.5rem}
+  .divider{border:none;border-top:1px solid #e2e8f0;margin:1.25rem 0}
+  h1{font-size:1.2em;font-weight:700;margin:1.25rem 0 .4rem;color:#0f172a}
+  h2{font-size:1.1em;font-weight:600;margin:1rem 0 .3rem;color:#1e293b}
+  h3{font-size:1em;font-weight:600;margin:.75rem 0 .25rem;color:#334155}
+  p{margin:0 0 .875rem;color:#334155}
+  strong{font-weight:600;color:#0f172a}
+  em{font-style:italic}
+  ul{margin:0 0 .875rem;padding-left:1.25rem}
+  li{margin-bottom:.25rem;color:#334155}
+  .footer{margin-top:2rem;font-size:.75rem;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:.75rem}
+</style>
+</head><body>
+<p class="title">Care Summary <span class="lang">${activeLangLabel}</span></p>
+<p class="meta">${data.patient_name} &mdash; Last updated ${formatDate(data.approved_at)}</p>
+<hr class="divider"/>
+${bodyHtml}
+<div class="footer">Reviewed and approved by your care team. Synthetic data only.</div>
+</body></html>`);
+            }}
+            className="rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-500 hover:border-teal-400 hover:text-teal-600"
+          >
+            Print summary
+          </button>
+        </div>
+
         {/* Footer */}
-        <p className="mt-10 text-center text-xs text-slate-300">
+        <p className="mt-8 text-center text-xs text-slate-300">
           This summary was reviewed and approved by your care team.
           It uses synthetic data only and is for demonstration purposes.
         </p>

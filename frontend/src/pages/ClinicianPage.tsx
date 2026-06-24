@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import QRCode from 'react-qr-code';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { markdownToHtml, openPrintWindow, PRINT_FONT } from '../lib/markdown';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -431,17 +433,30 @@ export default function ClinicianPage({ session }: { session: Session }) {
       {/* Approved success card */}
       {stage === 'approved' && (
         <div className="mx-auto max-w-2xl px-6 py-16">
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-8">
+          <div id="print-handout" className="rounded-lg border border-emerald-200 bg-emerald-50 p-8">
             <div className="flex items-center gap-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white print:bg-emerald-600">
                 ✓
               </span>
               <h2 className="text-lg font-semibold text-emerald-900">Message Approved</h2>
             </div>
-            <p className="mt-4 text-sm text-emerald-800">
-              Share this link with the patient's family:
-            </p>
-            <div className="mt-3 flex items-center gap-2">
+            {patient && (
+              <p className="mt-2 text-sm font-medium text-emerald-800">
+                {patient.patient_name} &mdash; {patient.dob} &bull; {patient.gender}
+              </p>
+            )}
+
+            {/* QR code */}
+            <div className="mt-6 flex flex-col items-center gap-3 rounded-md border border-emerald-200 bg-white p-6">
+              <QRCode value={approvedLink} size={160} />
+              <p className="text-center text-xs text-slate-500">
+                Scan to open the care summary on a phone or tablet
+              </p>
+            </div>
+
+            {/* Copyable link */}
+            <p className="mt-5 text-sm text-emerald-800">Or share the link directly:</p>
+            <div className="mt-2 flex items-center gap-2">
               <input
                 readOnly
                 value={approvedLink}
@@ -449,26 +464,63 @@ export default function ClinicianPage({ session }: { session: Session }) {
               />
               <button
                 onClick={() => navigator.clipboard.writeText(approvedLink)}
-                className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+                className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 print:hidden"
               >
                 Copy
               </button>
             </div>
-            <button
-              onClick={() => {
-                setStage('idle');
-                setPatient(null);
-                setDraftText('');
-                setCommId('');
-                setApprovedLink('');
-                setApproveError(null);
-                setFetchError(null);
-                setGenerateError(null);
-              }}
-              className="mt-6 text-sm text-emerald-700 underline hover:text-emerald-900"
-            >
-              Start New Patient
-            </button>
+
+            {/* Actions */}
+            <div className="mt-6 flex items-center gap-4">
+              <button
+                onClick={() => {
+                  const bodyHtml = markdownToHtml(draftText);
+                  openPrintWindow(`<!doctype html><html><head>
+<meta charset="utf-8"/>
+<title>Care Summary — ${patient?.patient_name ?? 'Patient'}</title>
+<style>
+  body{font-family:${PRINT_FONT};padding:2.5rem;color:#1e293b;max-width:600px;margin:0 auto}
+  .title{font-size:1.25rem;font-weight:600;margin:0 0 .25rem}
+  .meta{font-size:.875rem;color:#475569;margin:0 0 1.5rem}
+  .divider{border:none;border-top:1px solid #e2e8f0;margin:1.25rem 0}
+  h1{font-size:1.2rem;font-weight:700;margin:1.25rem 0 .4rem;color:#0f172a}
+  h2{font-size:1.05rem;font-weight:600;margin:1rem 0 .3rem;color:#1e293b}
+  h3{font-size:1rem;font-weight:600;margin:.75rem 0 .25rem;color:#334155}
+  p{font-size:1rem;line-height:1.7;color:#334155;margin:0 0 .875rem}
+  strong{font-weight:600;color:#0f172a}
+  em{font-style:italic}
+  ul{margin:0 0 .875rem;padding-left:1.25rem}
+  li{font-size:1rem;line-height:1.7;color:#334155;margin-bottom:.25rem}
+  .footer{margin-top:2rem;font-size:.75rem;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:.75rem}
+</style>
+</head><body>
+<p class="title">Care Summary</p>
+<p class="meta">${patient?.patient_name ?? ''} &mdash; ${patient?.dob ?? ''} &bull; ${patient?.gender ?? ''}</p>
+<hr class="divider"/>
+${bodyHtml}
+<div class="footer">Reviewed and approved by your care team. Synthetic data only.</div>
+</body></html>`);
+                }}
+                className="rounded-md border border-emerald-600 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+              >
+                Print Handout
+              </button>
+              <button
+                onClick={() => {
+                  setStage('idle');
+                  setPatient(null);
+                  setDraftText('');
+                  setCommId('');
+                  setApprovedLink('');
+                  setApproveError(null);
+                  setFetchError(null);
+                  setGenerateError(null);
+                }}
+                className="text-sm text-emerald-700 underline hover:text-emerald-900"
+              >
+                Start New Patient
+              </button>
+            </div>
           </div>
         </div>
       )}
