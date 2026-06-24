@@ -248,7 +248,7 @@ def get_family_view(
 def approve_communication(
     comm_id: str,
     req: ApproveRequest,
-    _: dict = Depends(verify_clinician_token),
+    user: dict = Depends(verify_clinician_token),
 ) -> ApproveResponse:
     record = get_communication(comm_id)
     if record is None:
@@ -257,6 +257,7 @@ def approve_communication(
         comm_id,
         ai_summary_text=req.ai_summary_text,
         status="Approved",
+        approved_by_user_id=user.get("id", ""),
     )
     updated = get_communication(comm_id)
     patient_id = updated.get("patient_id", "")

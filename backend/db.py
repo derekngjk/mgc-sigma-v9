@@ -61,10 +61,14 @@ def init_db(db_url: str) -> None:
                     translations_json JSONB DEFAULT '{}'
                 )
             """)
-            # Idempotent migration for databases created before translations_json was added.
+            # Idempotent migrations for columns added after initial schema.
             cur.execute("""
                 ALTER TABLE care_plan_translations
                 ADD COLUMN IF NOT EXISTS translations_json JSONB DEFAULT '{}'
+            """)
+            cur.execute("""
+                ALTER TABLE care_plan_translations
+                ADD COLUMN IF NOT EXISTS approved_by_user_id UUID
             """)
 
             # One family group per patient — stable across approvals
@@ -337,7 +341,7 @@ def set_translation(comm_id: str, lang: str, text: str) -> None:
     )
 
 
-_UPDATABLE_FIELDS = {"ai_summary_text", "status", "approved_at", "target_audience"}
+_UPDATABLE_FIELDS = {"ai_summary_text", "status", "approved_at", "target_audience", "approved_by_user_id"}
 
 
 def update_communication(comm_id: str, **kwargs: str) -> bool:

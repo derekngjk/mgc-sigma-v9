@@ -576,6 +576,72 @@ The original `"family"` option was too broad. A spouse supporting a partner thro
 
 ---
 
+## Feature 11 — Audit Trail
+
+**Files:** `backend/db.py`, `backend/main.py`, `backend/tests/conftest.py`, `backend/tests/test_task_4_2.py`
+
+### What was built
+
+A single nullable UUID column, `approved_by_user_id`, was added to `care_plan_translations`. It is populated from the Supabase Auth user ID present in the validated JWT whenever a clinician approves a communication. The column records which clinician account triggered each approval, without changing any existing fields or response shapes.
+
+### Why only `approved_by_user_id`
+
+The roadmap noted three audit gaps: who approved, which patient, and when. `patient_id` was already a FK on every row. `approved_at` was already set on approval. The only missing field was the clinician's identity. One additive column closes the gap without a schema rework.
+
+### Implementation decisions
+
+**Idempotent `ALTER TABLE` migration rather than a schema change to `CREATE TABLE`:** The `CREATE TABLE IF NOT EXISTS` block is the original schema; it is not edited. A separate `ADD COLUMN IF NOT EXISTS` statement runs after it. This pattern, already used for `translations_json`, means the migration is safe to run against both a fresh database (where the column is created as part of the initial table) and any existing database (where Postgres silently skips the `ALTER` if the column is already present).
+
+**`_UPDATABLE_FIELDS` whitelist extended:** `update_communication` filters kwargs through `_UPDATABLE_FIELDS` before passing them to Supabase. Adding `"approved_by_user_id"` to the set is sufficient to allow the approve route to write the value — no new DB function is needed.
+
+**`user.get("id", "")` over `user["id"]`:** The Supabase Auth `/auth/v1/user` response always includes `id`, but `.get` with a fallback guards against malformed or unexpected token shapes without raising a `KeyError` mid-request. The empty string fallback is safe: a UUID column storing `""` would fail Postgres type validation and be caught at the DB layer, making the failure visible rather than silent.
+
+**No response shape change:** `ApproveResponse` still returns `id`, `approved_at`, and `family_link`. `approved_by_user_id` is an internal audit field — it is not part of the clinician-facing response and does not need to be exposed to the frontend.
+
+### Testing decisions
+
+**`conftest.py` mock user updated to include `"id"`:** The session-scoped `override_auth` fixture previously returned `{"sub": "test-user"}`. The Supabase user object always includes both `sub` and `id`; the mock now returns `{"id": "test-user-id", "sub": "test-user"}` to match the real shape and prevent `user.get("id")` from silently returning `None` in tests.
+
+**`test_approve_stores_clinician_id` patches `main.update_communication`:** The test overrides the auth dependency to inject a known user ID (`"clinician-uuid-42"`), then patches `main.update_communication` with `wraps=` so the real function still executes. After the request completes, `call_args.kwargs` is inspected to assert `approved_by_user_id == "clinician-uuid-42"`. This approach tests the route-level wiring (that the user ID is extracted from the token and forwarded) without requiring a live database.
+
+### Verifying the change in a live environment
+
+#### 1. Confirm the column exists after startup
+
+Start the backend and check the schema directly:
+
+```bash
+cd backend
+source .env
+psql "$SUPABASE_DB_URL" -c "\d care_plan_translations" | grep approved
+```
+
+Expected output:
+
+```text
+ approved_at            | timestamp with time zone |
+ approved_by_user_id    | uuid                     |
+```
+
+If `approved_by_user_id` is not listed, the migration did not run — check that `SUPABASE_DB_URL` is set and that the backend started without errors.
+
+#### 2. Run an approval and confirm the column is populated
+
+Complete a full flow in the clinician UI (fetch patient → generate → approve). Then query the latest approved row:
+
+```bash
+psql "$SUPABASE_DB_URL" -c \
+  "SELECT id, approved_at, approved_by_user_id
+   FROM care_plan_translations
+   WHERE status = 'Approved'
+   ORDER BY approved_at DESC
+   LIMIT 1;"
+```
+
+`approved_by_user_id` should contain your Supabase Auth user UUID. It matches the value in **Authentication → Users** in the Supabase dashboard.
+
+---
+
 ## Feature Roadmap & TODOs
 
 The following core features are required to align the current proof-of-concept with the target functional architecture:
