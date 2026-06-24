@@ -429,6 +429,70 @@ The family viewer URL was restructured from `/family/{comm_id}` (a single opaque
 
 ---
 
+## Feature 3 — Multilingual Translation (EN / ZH / MS / TA)
+
+**Files:** `backend/llm.py`, `backend/db.py`, `backend/main.py`, `backend/tests/test_translation.py`, `backend/tests/test_translation_db.py`, `backend/tests/test_translation_routes.py`, `frontend/src/pages/FamilyPage.tsx`
+
+### What was built
+
+Approved English summaries can now be read in Singapore's four official languages. A language toggle (`EN` / `中文` / `BM` / `தமிழ்`) appears on the family viewer page. Translations are generated on first request (lazy) and cached in a new `translations_json` JSONB column so subsequent requests for the same language are instant. The same `?lang=` query parameter works on both `GET /api/family/{fid}/member/{mid}` and the legacy `GET /api/communications/{id}` endpoint.
+
+### Translation provider decision
+
+**LLM instead of a dedicated translation API:** Azure AI Translator and Google Cloud Translation were both evaluated. Azure was preferred on cost ($10/M chars vs $20/M chars) and simpler auth (single API key vs Service Account JSON). However, both require additional billing credentials. Since the project already has LLM API keys wired up, `translate_summary` reuses the existing `_call_llm` dispatch — no new credentials or services are needed. The LLM also produces more natural-sounding output than a statistical translation model, which matters for patient-facing prose that must preserve a warm, empathetic tone.
+
+**Rejected: Azure Dynamic Dictionary for glossary injection:** Azure's per-request glossary mechanism requires embedding `<mstrans:dictionary>` XML markup in the source text and sending `textType=html`. This is documented as "safe for proper nouns only" and does not work reliably for common medical nouns. The LLM prompt approach is more flexible: the glossary is injected as plain text and the model applies it contextually, handling plurals, case, and sentence position correctly.
+
+### Glossary decisions
+
+**Source: HealthHub A–Z Medications Glossary + Cambridge Dictionary.** HealthHub (healthhub.sg) is the MOH Singapore patient portal and publishes health content in all four official languages. The Cambridge Dictionary bilingual entries for English→Chinese Simplified, English→Malaysian, and English→Tamil were used as a secondary verification source for common clinical terms. Official institution names (NCCS, SGH) were sourced from their respective websites. Every entry in `_CLINICAL_GLOSSARY` in `llm.py` is annotated with which source it came from.
+
+**13 terms × 3 languages, injected into the prompt:** The glossary is formatted as a plain-text reference block (`en_term → target_term`) and embedded in the translation prompt under a "Medical term reference (use these translations)" heading. This ensures the LLM uses the Singapore-specific translation (e.g. `palliative care → 舒缓治疗` per MOH/SingHealth, not `姑息治疗` as used in mainland China) rather than its training-data default. The glossary covers the most likely terms to appear in any of the five mock patient scenarios.
+
+**Condition diff section not translated:** The condition names in `ChangesSection` on the family viewer come directly from FHIR and are stored as English strings. Translating them would require a separate pass and risk inconsistency with clinical identifiers. They are left in English — clinically meaningful to care teams and recognisable to most patients by name.
+
+### Schema decisions
+
+**`translations_json JSONB DEFAULT '{}'` column on `care_plan_translations`:** A single JSONB column stores all language translations for a record as `{"zh": "...", "ms": "...", "ta": "..."}`. Alternatives considered:
+
+| Option | Verdict |
+| --- | --- |
+| Separate `translations` table with `(comm_id, lang, text)` rows | Overkill for 3 languages; adds a join to every family-viewer request |
+| One column per language (`ai_summary_zh`, `ai_summary_ms`, `ai_summary_ta`) | Rigid schema; adding a language requires a migration |
+| Single JSONB column | Zero joins, arbitrary languages without schema changes, easy to inspect |
+
+**Idempotent migration via `ADD COLUMN IF NOT EXISTS`:** `init_db` adds the column to the `CREATE TABLE` definition (for fresh databases) and also runs `ALTER TABLE care_plan_translations ADD COLUMN IF NOT EXISTS translations_json JSONB DEFAULT '{}'` (a no-op on fresh databases, a live migration on existing ones). This follows the same migration pattern established in the condition-change-tracking cross-cutting section.
+
+### API design decisions
+
+**Lazy translation via `?lang=` query parameter:** Translation is triggered on the first family-viewer request for a given language, not at approval time. This keeps the approval step fast (no LLM calls beyond the summary itself) and means unused languages never incur a cost. The same endpoint is used for all languages — the frontend just appends `?lang=zh` etc. on language switch.
+
+**Cache check before LLM call:** `get_translation(comm_id, lang)` is a lightweight single-column Supabase query. On a cache hit it returns immediately. On a miss, `translate_summary` is called, then `set_translation` writes the result back. Subsequent requests for the same language are served from the cache.
+
+**Invalid lang → 400, LLM failure → 502/503:** `_VALID_LANGS = {"en", "zh", "ms", "ta"}` is checked at route entry before touching the DB. An unrecognised lang code (e.g. `?lang=fr`) returns 400 immediately. LLM errors map to the same 502/503 pattern used by `POST /api/generate`.
+
+**`lang="en"` short-circuits entirely:** When `lang="en"` (the default), neither `get_translation` nor `set_translation` are called. The English `ai_summary_text` is returned directly. This avoids a Supabase round-trip on every standard (English) family-viewer load.
+
+### Frontend decisions
+
+**`summaryText` decoupled from `data.ai_summary_text`:** `data` is set once on initial load and holds all metadata (patient name, approved date, condition diff). `summaryText` is a separate state string that starts as `data.ai_summary_text` and is updated independently on each language switch. This avoids mutating `data` and keeps the metadata (patient name, condition diff) visible and stable while the summary text swaps.
+
+**`lang` committed on success only:** `setLang(newLang)` is called only after the fetch succeeds. If the translation request fails, `lang` stays pointing at the last successfully displayed language, so the active button remains correct.
+
+**Opacity fade during translation:** The summary container's opacity drops to 40% while `translating` is true, giving the user a clear signal that the current text is being replaced. A spinner appears inline in the button row — not a full-screen overlay — so the patient name, date, and condition diff remain readable while waiting.
+
+**`translating` guard prevents concurrent requests:** `handleLangChange` returns early if `translating` is already true. This prevents double-tapping or rapid switching from firing multiple in-flight LLM calls.
+
+### Testing decisions
+
+**Three test files for three layers:** `test_translation.py` tests the LLM prompt logic in `llm.py` (mocking `_call_llm`); `test_translation_db.py` tests `get_translation` and `set_translation` against the Supabase mock; `test_translation_routes.py` tests the route-level behaviour (lang validation, cache hit, cache miss, error mapping) by monkeypatching `main.*` functions directly.
+
+**Route tests monkeypatch `main.*`, not the Supabase chain:** The route tests patch `main.get_family_summary`, `main.get_translation`, `main.translate_summary`, and `main.set_translation` at the `main` module's namespace (not the source modules). This is necessary because `main.py` uses `from db import ...` and `from llm import ...` — the name bindings in `main` are fixed at import time, so patching the source module would not affect `main`'s references.
+
+**`lang` committed on success tested explicitly:** `test_family_member_cache_miss_translates_and_caches` asserts that `set_translation` is called with exactly `("comm-001", "zh", ZH_TEXT)` — verifying both that the result is cached and that the correct comm_id and lang code are written.
+
+---
+
 ## Feature Roadmap & TODOs
 
 The following core features are required to align the current proof-of-concept with the target functional architecture:
@@ -441,7 +505,7 @@ The following core features are required to align the current proof-of-concept w
    * Refactor the frontend router and backend endpoints to use the secure, structured `/family/:fid/member/:mid` path.
    * Implement token-based validation for family member access.
 
-3. **Multilingual Translation**
+3. **Multilingual Translation** ✅
    * Integrate translation services to translate approved summaries into Singapore's official languages: English (EN), Chinese (ZH), Malay (MS), and Tamil (TA).
    * Incorporate a clinical glossary to ensure translation accuracy of medical terms.
 

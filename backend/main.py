@@ -2,7 +2,7 @@ import json
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -13,12 +13,14 @@ from db import (
     get_latest_approved_communication,
     get_or_create_family,
     get_or_create_primary_member,
+    get_translation,
     init_db,
+    set_translation,
     update_communication,
 )
 from fhir import FHIRError, PatientNotFoundError, fetch_patient_data
 from auth import verify_clinician_token
-from llm import LLMConfigError, LLMError, generate_summary
+from llm import LLMConfigError, LLMError, generate_summary, translate_summary
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -95,6 +97,9 @@ class FamilyViewResponse(BaseModel):
     ai_summary_text: str
     approved_at: str
     condition_diff: ConditionDiff
+
+
+_VALID_LANGS = {"en", "zh", "ms", "ta"}
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -186,7 +191,12 @@ def generate(
 
 
 @app.get("/api/communications/{comm_id}", response_model=FamilyViewResponse)
-def get_family_view(comm_id: str) -> FamilyViewResponse:
+def get_family_view(
+    comm_id: str,
+    lang: str = Query(default="en"),
+) -> FamilyViewResponse:
+    if lang not in _VALID_LANGS:
+        raise HTTPException(status_code=400, detail=f"lang must be one of: {sorted(_VALID_LANGS)}")
     record = get_communication(comm_id)
     if record is None or record["status"] != "Approved":
         raise HTTPException(
@@ -197,10 +207,23 @@ def get_family_view(comm_id: str) -> FamilyViewResponse:
         if record.get("condition_diff")
         else {"added": [], "removed": [], "ongoing": []}
     )
+    summary_text = record["ai_summary_text"]
+    if lang != "en":
+        cached = get_translation(comm_id, lang)
+        if cached is not None:
+            summary_text = cached
+        else:
+            try:
+                summary_text = translate_summary(record["ai_summary_text"], lang)
+            except LLMConfigError as exc:
+                raise HTTPException(status_code=503, detail=str(exc))
+            except LLMError as exc:
+                raise HTTPException(status_code=502, detail=str(exc))
+            set_translation(comm_id, lang, summary_text)
     return FamilyViewResponse(
         id=comm_id,
         patient_name=record["patient_name"],
-        ai_summary_text=record["ai_summary_text"],
+        ai_summary_text=summary_text,
         approved_at=record["approved_at"],
         condition_diff=ConditionDiff(**diff_raw),
     )
@@ -232,7 +255,13 @@ def approve_communication(
 
 
 @app.get("/api/family/{family_id}/member/{member_id}", response_model=FamilyViewResponse)
-def get_family_member_view(family_id: str, member_id: str) -> FamilyViewResponse:
+def get_family_member_view(
+    family_id: str,
+    member_id: str,
+    lang: str = Query(default="en"),
+) -> FamilyViewResponse:
+    if lang not in _VALID_LANGS:
+        raise HTTPException(status_code=400, detail=f"lang must be one of: {sorted(_VALID_LANGS)}")
     record = get_family_summary(family_id, member_id)
     if record is None:
         raise HTTPException(
@@ -243,10 +272,23 @@ def get_family_member_view(family_id: str, member_id: str) -> FamilyViewResponse
         if record.get("condition_diff")
         else {"added": [], "removed": [], "ongoing": []}
     )
+    summary_text = record["ai_summary_text"]
+    if lang != "en":
+        cached = get_translation(record["id"], lang)
+        if cached is not None:
+            summary_text = cached
+        else:
+            try:
+                summary_text = translate_summary(record["ai_summary_text"], lang)
+            except LLMConfigError as exc:
+                raise HTTPException(status_code=503, detail=str(exc))
+            except LLMError as exc:
+                raise HTTPException(status_code=502, detail=str(exc))
+            set_translation(record["id"], lang, summary_text)
     return FamilyViewResponse(
         id=record["id"],
         patient_name=record["patient_name"],
-        ai_summary_text=record["ai_summary_text"],
+        ai_summary_text=summary_text,
         approved_at=record["approved_at"],
         condition_diff=ConditionDiff(**diff_raw),
     )

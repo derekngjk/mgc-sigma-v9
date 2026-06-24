@@ -6,6 +6,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 // ── types ─────────────────────────────────────────────────────────────────────
 
 type PageState = 'loading' | 'not_found' | 'loaded';
+type Lang = 'en' | 'zh' | 'ms' | 'ta';
 
 interface ConditionDiff {
   added: string[];
@@ -20,6 +21,15 @@ interface FamilyViewData {
   approved_at: string;
   condition_diff: ConditionDiff;
 }
+
+// ── constants ─────────────────────────────────────────────────────────────────
+
+const LANG_OPTIONS: { code: Lang; label: string }[] = [
+  { code: 'en', label: 'EN' },
+  { code: 'zh', label: '中文' },
+  { code: 'ms', label: 'BM' },
+  { code: 'ta', label: 'தமிழ்' },
+];
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -110,6 +120,10 @@ export default function FamilyPage() {
   const { fid, mid } = useParams<{ fid: string; mid: string }>();
   const [pageState, setPageState] = useState<PageState>('loading');
   const [data, setData] = useState<FamilyViewData | null>(null);
+  const [lang, setLang] = useState<Lang>('en');
+  const [summaryText, setSummaryText] = useState('');
+  const [translating, setTranslating] = useState(false);
+  const [translateError, setTranslateError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!fid || !mid) {
@@ -118,16 +132,34 @@ export default function FamilyPage() {
     }
     fetch(`${API_BASE}/api/family/${fid}/member/${mid}`)
       .then(async (res) => {
-        if (!res.ok) {
-          setPageState('not_found');
-          return;
-        }
+        if (!res.ok) { setPageState('not_found'); return; }
         const json = (await res.json()) as FamilyViewData;
         setData(json);
+        setSummaryText(json.ai_summary_text);
         setPageState('loaded');
       })
       .catch(() => setPageState('not_found'));
   }, [fid, mid]);
+
+  async function handleLangChange(newLang: Lang) {
+    if (newLang === lang || translating || !fid || !mid) return;
+    setTranslating(true);
+    setTranslateError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/family/${fid}/member/${mid}?lang=${newLang}`);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(body.detail ?? `HTTP ${res.status}`);
+      }
+      const json = (await res.json()) as FamilyViewData;
+      setSummaryText(json.ai_summary_text);
+      setLang(newLang);
+    } catch (e) {
+      setTranslateError(e instanceof Error ? e.message : 'Translation failed');
+    } finally {
+      setTranslating(false);
+    }
+  }
 
   if (pageState === 'loading') return <LoadingScreen />;
   if (pageState === 'not_found' || !data) return <NotFoundScreen />;
@@ -146,7 +178,7 @@ export default function FamilyPage() {
       {/* Body */}
       <main className="mx-auto max-w-lg px-6 py-8">
         {/* Meta */}
-        <div className="mb-6">
+        <div className="mb-5">
           <p className="text-xs text-slate-400">Prepared for</p>
           <p className="text-xl font-semibold text-slate-900">{data.patient_name}</p>
           <p className="mt-1 text-xs text-slate-400">
@@ -154,9 +186,36 @@ export default function FamilyPage() {
           </p>
         </div>
 
+        {/* Language toggle */}
+        <div className="mb-6 flex gap-2">
+          {LANG_OPTIONS.map(({ code, label }) => (
+            <button
+              key={code}
+              onClick={() => handleLangChange(code)}
+              disabled={translating}
+              className={`rounded-full px-3 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                lang === code
+                  ? 'bg-teal-600 text-white'
+                  : 'border border-slate-200 bg-white text-slate-500 hover:border-teal-400 hover:text-teal-600'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          {translating && (
+            <span className="ml-1 inline-block h-5 w-5 self-center animate-spin rounded-full border-2 border-slate-200 border-t-teal-500" />
+          )}
+        </div>
+
+        {translateError && (
+          <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            Translation failed: {translateError}
+          </div>
+        )}
+
         {/* Summary */}
-        <div className="prose prose-slate max-w-none">
-          {data.ai_summary_text.split('\n\n').map((para, i) => (
+        <div className={`prose prose-slate max-w-none transition-opacity ${translating ? 'opacity-40' : 'opacity-100'}`}>
+          {summaryText.split('\n\n').map((para, i) => (
             <p key={i} className="mb-4 text-base leading-relaxed text-slate-700">
               {para}
             </p>

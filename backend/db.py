@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 from datetime import datetime, timezone
@@ -56,8 +57,14 @@ def init_db(db_url: str) -> None:
                     created_at TIMESTAMPTZ DEFAULT now(),
                     approved_at TIMESTAMPTZ,
                     conditions_json JSONB NOT NULL DEFAULT '[]',
-                    condition_diff JSONB
+                    condition_diff JSONB,
+                    translations_json JSONB DEFAULT '{}'
                 )
+            """)
+            # Idempotent migration for databases created before translations_json was added.
+            cur.execute("""
+                ALTER TABLE care_plan_translations
+                ADD COLUMN IF NOT EXISTS translations_json JSONB DEFAULT '{}'
             """)
 
             # One family group per patient — stable across approvals
@@ -147,10 +154,7 @@ def get_communication(comm_id: str) -> Optional[dict]:
     record["patient_name"] = patient.get("patient_name", "")
     record["epic_patient_id"] = patient.get("epic_patient_id", "")
 
-    # Supabase might return dict for JSONB, but code expects strings for json.loads
-    # For backward compatibility, we convert them back to strings if they are dicts/lists
-    import json
-
+    # Supabase returns JSONB columns as dicts/lists; callers that use json.loads expect strings.
     if isinstance(record.get("conditions_json"), (list, dict)):
         record["conditions_json"] = json.dumps(record["conditions_json"])
     if isinstance(record.get("condition_diff"), (list, dict)):
@@ -191,8 +195,6 @@ def get_latest_approved_communication(epic_patient_id: str) -> Optional[dict]:
     patient = record.pop("patients", {})
     record["patient_name"] = patient.get("patient_name", "")
     record["epic_patient_id"] = patient.get("epic_patient_id", "")
-
-    import json
 
     if isinstance(record.get("conditions_json"), (list, dict)):
         record["conditions_json"] = json.dumps(record["conditions_json"])
@@ -288,6 +290,44 @@ def get_family_summary(family_id: str, member_id: str) -> Optional[dict]:
         record["condition_diff"] = json.dumps(record["condition_diff"])
 
     return record
+
+
+def get_translation(comm_id: str, lang: str) -> Optional[str]:
+    """Return a cached translation for lang from translations_json, or None on cache miss."""
+    supabase = get_supabase()
+    res = (
+        supabase.table("care_plan_translations")
+        .select("translations_json")
+        .eq("id", comm_id)
+        .execute()
+    )
+    if not res.data:
+        return None
+    raw = res.data[0].get("translations_json") or {}
+    translations: dict = json.loads(raw) if isinstance(raw, str) else raw
+    return translations.get(lang)
+
+
+def set_translation(comm_id: str, lang: str, text: str) -> None:
+    """Write a translation into translations_json, preserving any other cached languages."""
+    supabase = get_supabase()
+    res = (
+        supabase.table("care_plan_translations")
+        .select("translations_json")
+        .eq("id", comm_id)
+        .execute()
+    )
+    if not res.data:
+        return
+    raw = res.data[0].get("translations_json") or {}
+    current: dict = json.loads(raw) if isinstance(raw, str) else raw
+    current[lang] = text
+    (
+        supabase.table("care_plan_translations")
+        .update({"translations_json": current})
+        .eq("id", comm_id)
+        .execute()
+    )
 
 
 _UPDATABLE_FIELDS = {"ai_summary_text", "status", "approved_at", "target_audience"}

@@ -12,6 +12,78 @@ ANTHROPIC_MODEL = "claude-opus-4-7"
 OPENAI_MODEL = "gpt-4o"
 GEMINI_MODEL = "gemini-3.5-flash"
 
+# Singapore's four official languages available for family viewer translation.
+_SUPPORTED_LANGS: dict[str, str] = {
+    "zh": "Simplified Chinese (简体中文)",
+    "ms": "Malay (Bahasa Melayu)",
+    "ta": "Tamil (தமிழ்)",
+}
+
+# Clinical term glossary injected into the translation prompt for consistency.
+#
+# Sources:
+#   [1] HealthHub A-Z Medications Glossary (healthhub.sg — MOH Singapore patient portal)
+#       https://www.healthhub.sg/medication-devices-and-treatment/medications
+#   [2] Cambridge Dictionary bilingual entries (dictionary.cambridge.org)
+#       EN→ZH-Hans: /dictionary/english-chinese-simplified/
+#       EN→MS:      /dictionary/english-malaysian/
+#       EN→TA:      /dictionary/english-tamil/
+#   [3] Official institution names — MOH Singapore, NCCS, SingHealth
+#       https://www.nccs.com.sg  |  https://www.moh.gov.sg
+_CLINICAL_GLOSSARY: dict[str, dict[str, str]] = {
+    "zh": {
+        # Common clinical nouns — sources [1][2]
+        "cancer": "癌症",
+        "tumour": "肿瘤",
+        "tumor": "肿瘤",
+        "chemotherapy": "化疗",
+        "radiation therapy": "放射治疗",
+        "radiotherapy": "放射治疗",
+        "biopsy": "活检",
+        "metastasis": "癌细胞转移",
+        "surgery": "手术",
+        "palliative care": "舒缓治疗",  # MOH/SingHealth Singapore usage [1]
+        # Drug brand names and institutions — source [3]
+        "Herceptin": "赫赛汀",
+        "National Cancer Centre Singapore": "新加坡国家癌症中心",
+        "Singapore General Hospital": "新加坡中央医院",
+    },
+    "ms": {
+        # Common clinical nouns — sources [1][2]
+        "cancer": "kanser",
+        "tumour": "tumor",
+        "tumor": "tumor",
+        "chemotherapy": "kemoterapi",
+        "radiation therapy": "terapi sinaran",  # "sinaran" = ray/beam in Malay [2]
+        "radiotherapy": "radioterapi",
+        "biopsy": "biopsi",
+        "metastasis": "metastasis",
+        "surgery": "pembedahan",
+        "palliative care": "penjagaan paliatif",
+        # Drug brand names and institutions — source [3]
+        "Herceptin": "Herceptin",
+        "National Cancer Centre Singapore": "Pusat Kanser Negara Singapura",
+        "Singapore General Hospital": "Hospital Umum Singapura",
+    },
+    "ta": {
+        # Common clinical nouns — sources [1][2]
+        "cancer": "புற்றுநோய்",
+        "tumour": "கட்டி",
+        "tumor": "கட்டி",
+        "chemotherapy": "கீமோதெரபி",
+        "radiation therapy": "கதிர்வீச்சு சிகிச்சை",
+        "radiotherapy": "கதிர்வீச்சு சிகிச்சை",
+        "biopsy": "திசு பரிசோதனை",
+        "metastasis": "புற்றுநோய் பரவல்",
+        "surgery": "அறுவை சிகிச்சை",
+        "palliative care": "தணிப்பு சிகிச்சை",
+        # Drug brand names and institutions — source [3]
+        "Herceptin": "ஹெர்செப்டின்",
+        "National Cancer Centre Singapore": "சிங்கப்பூர் தேசிய புற்றுநோய் மையம்",
+        "Singapore General Hospital": "சிங்கப்பூர் பொது மருத்துவமனை",
+    },
+}
+
 _SYSTEM_PROMPT = (
     "You are a medical translator helping patients and their families understand "
     "complex clinical information. Translate the clinical data provided into clear, "
@@ -58,6 +130,35 @@ def generate_summary(
         f"{diff_section}\n\n"
         f"Clinical data (JSON):\n{raw_clinical_text}\n\n"
         f"Please translate this for a {target_audience}."
+    )
+    return _call_llm(prompt)
+
+
+def translate_summary(text: str, lang: str) -> str:
+    """Translate an approved English summary into a Singapore official language.
+
+    Returns text unchanged for lang='en'.
+    Raises LLMConfigError for an unsupported language code or misconfigured provider.
+    Raises LLMError if the LLM call fails.
+    """
+    if lang == "en":
+        return text
+    if lang not in _SUPPORTED_LANGS:
+        raise LLMConfigError(
+            f"Unsupported language: {lang!r}. Supported non-English codes: {list(_SUPPORTED_LANGS)}"
+        )
+    lang_name = _SUPPORTED_LANGS[lang]
+    glossary = _CLINICAL_GLOSSARY.get(lang, {})
+    glossary_lines = "\n".join(f"  {en} → {target}" for en, target in glossary.items())
+    prompt = (
+        f"Translate the following patient health summary from English into {lang_name}.\n\n"
+        "Rules:\n"
+        "- Preserve the warm, empathetic tone exactly.\n"
+        "- Keep the same paragraph structure.\n"
+        "- Use the medical term translations listed below for consistency.\n"
+        "- Return only the translated text, with no explanations or headings.\n\n"
+        f"Medical term reference (use these translations):\n{glossary_lines}\n\n"
+        f"Summary to translate:\n{text}"
     )
     return _call_llm(prompt)
 
