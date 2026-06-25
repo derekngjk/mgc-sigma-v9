@@ -642,6 +642,70 @@ psql "$SUPABASE_DB_URL" -c \
 
 ---
 
+## Feature 12 — Text-to-Speech + Synchronized Sentence Highlighting
+
+**Files:** `backend/tts.py` (new), `backend/db.py`, `backend/main.py`, `backend/tests/test_tts.py` (new), `frontend/src/lib/markdown.ts`, `frontend/src/pages/FamilyPage.tsx`
+
+### What was built
+
+Approved summaries can now be listened to in all four supported languages. A "▶ Listen / ⏸ Pause" button appears on the family viewer. On first tap, the backend generates an MP3 via OpenAI TTS, uploads it to Supabase Storage, caches the public URL in the database, and returns it alongside a sentence list. While playing, the summary view switches from the normal markdown-rendered layout to a sentence-by-sentence reader where the currently spoken sentence glows amber. When the audio ends or is paused, the view reverts to the normal markdown display. Subsequent taps for the same language return the cached Storage URL instantly — no re-generation.
+
+### Provider decision
+
+**OpenAI `tts-1`, voice `alloy`:** Three providers were available (`tts-1`, ElevenLabs, Azure Neural TTS). OpenAI was chosen because it is already in `requirements.txt` (no new dependency), `tts-1` handles all four Singapore languages natively without per-language voice configuration, and `alloy` is the most neutral voice — appropriate for a medical context where a strongly gendered or expressive voice would feel out of place. ElevenLabs produces higher-quality audio but adds billing credentials and a new SDK. Azure Neural TTS has the best per-language voice fidelity but the most complex setup.
+
+### Storage decision
+
+**Supabase Storage bucket `tts-audio` (public read):** Audio files are binary blobs; storing base64 in a JSONB column was considered and rejected — a medium-length summary at `tts-1` bitrate is ~400 KB, which would bloat the row significantly and make SELECT queries slower even when audio is not requested. Supabase Storage keeps the database rows thin and lets the browser stream the MP3 directly from the CDN URL without proxying through the backend. The bucket is public read (so the family viewer can `<audio src="...">` without an auth header) but write access requires the service role key — correctly enforced by Supabase's default Storage RLS.
+
+**Service role key required for uploads:** The publishable (anon) key is blocked from Storage uploads by Supabase's default RLS. The backend's `SUPABASE_KEY` must be the `sb_secret_...` service role key. This is already the correct key for a server-side backend — the anon key is intended for browser clients only.
+
+### Schema decision
+
+**`audio_urls_json JSONB DEFAULT '{}'` column on `care_plan_translations`:** Mirrors the `translations_json` pattern exactly. Structure: `{"en": "https://...mp3", "zh": "https://...mp3"}`. Cached per `comm_id + lang` — re-approving a record creates a new `comm_id`, which naturally invalidates the audio cache for that record (the new summary text may differ). Added via idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, consistent with all prior schema migrations.
+
+### `tts.py` module decisions
+
+**`strip_markdown(text)` is a Python port of `frontend/src/lib/markdown.ts:stripMarkdown()`:** The two functions apply identical regex operations (remove `#` headings, `**bold**`, `*italic*`, `- list` markers). Keeping them in sync is intentional — both strip the same syntax, so TTS input and the sentence-splitting done on the frontend operate on equivalent plain text.
+
+**`split_sentences(text)` splits on newlines then on `[.!?]` boundaries:** The function first splits on `\n` (so each heading or list item becomes its own candidate) then applies a lookbehind split on sentence-ending punctuation within each line. This two-pass approach correctly handles markdown structure where each heading is a single "sentence" even without terminal punctuation, while also correctly breaking long prose paragraphs into individual sentences. The backend produces this list and returns it with the audio URL so the frontend can use it for proportional timing.
+
+**`generate_tts(text)` takes only the clean stripped text, no `lang` parameter:** OpenAI `tts-1` auto-detects the language from the input text. There is no `language` parameter on the API. This means the correct flow for non-English audio is: translate first (reusing the existing translation cache), then strip markdown from the translated text, then TTS. The endpoint handles this sequencing.
+
+### API design decisions
+
+**`GET /api/family/{fid}/member/{mid}/audio?lang=` — no auth guard:** The family viewer is a public page (no login required). Audio is an extension of the approved summary text, which is already publicly accessible at the same URL without `?lang=`. Gating audio behind auth would break the use case (a family member tapping "Listen" on their phone).
+
+**Endpoint returns `{url, sentences}` together:** The frontend needs both the audio URL (to set `<audio src>`) and the sentence list (for proportional timing) at the same time. Splitting these into two requests would add latency and a second loading state. Since `split_sentences` is cheap (no I/O), computing and returning it alongside the URL costs nothing.
+
+**Translation cache reused before TTS:** For non-English audio, the endpoint first checks `get_translation(comm_id, lang)`. If the translation already exists (from the user having toggled the language earlier), it is used directly. If not, `translate_summary` is called and cached via `set_translation` before generating audio. This means the translation and audio caches stay in sync and the same translated text is both displayed and spoken.
+
+**Cache check before generation:** `get_audio_url(comm_id, lang)` is checked before calling `generate_tts`. On a cache hit, `sentences` are still recomputed from the current `summaryText` (cheap, deterministic from the stored text) and returned with the cached URL. This avoids storing the sentence list separately while still serving the full response shape.
+
+### Frontend decisions
+
+**`splitMarkdownSentences` added to `lib/markdown.ts` (exported):** The frontend splits `summaryText` independently using the same algorithm as the backend's `split_sentences` — newlines first, then `[.!?]` boundary splits. This means `displaySentences.length === sentences.length` always holds (same algorithm, different input: the frontend splits the original markdown text, the backend splits the stripped text, but sentence boundaries are determined by punctuation/newlines that exist in both). The backend's `sentences` list is used purely for proportional timing; the frontend's `splitMarkdownSentences(summaryText)` is used purely for display.
+
+**`inlineToHtml` exported from `lib/markdown.ts`:** Previously unexported. The highlight view renders each display sentence through `inlineToHtml` to preserve `**bold**` → `<strong>` and `*italic*` → `<em>` inline formatting. This avoids the full `markdownToHtml` block-level parser (which produces `<p>` and `<ul>` wrappers that would conflict with the per-sentence span rendering) while still giving correct inline formatting.
+
+**Three rendering cases in the highlight view:** Headings (`/^#{1,3}\s+/`), list items (`/^[-*+]\s+/`), and plain text sentences are rendered as distinct JSX elements. Headings become `<div>` with bold weight and margin classes that mirror the CSS in `markdownToHtml`'s heading output. List items become a flex row with a bullet dot, matching the visual rhythm of the normal markdown list. Plain sentences are inline `<span>` elements so consecutive sentences in a paragraph flow together naturally without forced line breaks between them.
+
+**View switches between markdown and highlight mode:** When `isPlaying` is true (or audio has been loaded but is paused), the `dangerouslySetInnerHTML` markdown view is replaced by the sentence-span view. When audio ends or is stopped, the view reverts. This avoids the complexity of injecting `<span>` wrappers into the already-rendered markdown HTML via DOM manipulation — a simpler, more maintainable approach for a PoC.
+
+**Proportional char-based timing:** The audio `timeupdate` event fires on `HTMLAudioElement`; `currentTime / duration * totalChars` gives a char-position in the stripped text. A linear scan of `charOffsets` (cumulative char counts per sentence) finds the current sentence index. This is an approximation — TTS speaking rate is not perfectly proportional to character count — but it produces visibly accurate highlighting for the kinds of sentences in a medical summary (similar sentence lengths, no extremely long run-ons). `charOffsets` is computed once when `audioUrl` is set and captured by the `useEffect` closure.
+
+**Audio state reset on language change:** When `handleLangChange` is called, `audioUrl`, `sentences`, `currentSentenceIdx`, and `isPlaying` are all cleared before the translation fetch begins. This prevents a race where a new language is displayed but the old language's audio continues playing with stale sentence highlighting.
+
+### Testing decisions
+
+**11 tests across three layers:** `test_strip_markdown_*` and `test_split_sentences_*` test the pure utility functions directly (no mocking needed). `test_generate_tts_*` tests the OpenAI API call with a monkeypatched `generate_tts` and a direct import reload to test the key-check branch. Endpoint tests monkeypatch `main.get_audio_url`, `main.generate_tts`, `main.upload_audio`, and `main.set_audio_url` — consistent with the monkeypatching-at-`main`-namespace pattern established in `test_translation_routes.py`.
+
+**`test_audio_endpoint_cache_hit_skips_generation`:** Verifies that when `get_audio_url` returns a URL, `generate_tts` is never called. This is the most important behavioral property of the caching layer — without this test, a future refactor could silently re-generate audio on every request.
+
+**`test_generate_tts_missing_key_raises` uses `importlib.reload`:** The `OPENAI_API_KEY` presence is checked at call time via `os.environ.get`. Monkeypatching `delenv` and then reloading the module ensures the module-level state is clean before the test. This is the same pattern used in `test_translation.py` for `LLMConfigError` on missing provider keys.
+
+---
+
 ## Feature Roadmap & TODOs
 
 The following core features are required to align the current proof-of-concept with the target functional architecture:
@@ -658,19 +722,19 @@ The following core features are required to align the current proof-of-concept w
    - Integrate translation services to translate approved summaries into Singapore's official languages: English (EN), Chinese (ZH), Malay (MS), and Tamil (TA).
    - Incorporate a clinical glossary to ensure translation accuracy of medical terms.
 
-4. **Text-to-Speech (TTS) Generation**
-    - Integrate a TTS engine (e.g. OpenAI `tts-1`, ElevenLabs, or Azure Neural TTS) to synthesise audio (MP3) of the approved summary in each supported language.
-    - Store generated audio in Supabase Storage (or S3); cache like translations — generate on first request, serve from cache thereafter.
-    - Expose via a new `GET /api/family/{fid}/member/{mid}/audio?lang=` endpoint that returns a signed URL to the audio file.
+4. **Text-to-Speech (TTS) Generation** ✅
+    - OpenAI `tts-1` (voice: `alloy`) generates MP3 audio of the approved summary per language.
+    - Audio stored in Supabase Storage bucket `tts-audio`; cached in `audio_urls_json` JSONB column — lazy, per `comm_id + lang`.
+    - `GET /api/family/{fid}/member/{mid}/audio?lang=` returns `{url, sentences}`.
+    - Synchronized sentence highlighting: current sentence glows amber as audio plays, using proportional char-based timing from `audio.currentTime / audio.duration`.
 
 5. **Visual Aid Generation (Nano Banana)**
     - Integrate an image generation model (e.g. Gemini 2.5 Flash Image, DALL-E 3) to produce a supportive illustration for the care plan.
     - Store and serve images alongside summaries. Consider one image per summary (generated at approval time, not lazily) to avoid UX delay on the family viewer.
 
-6. **Audio Playback & Visuals in Family Viewer**
-    - Add an audio player component (`<audio>` element or a custom play/pause bar) in `FamilyPage.tsx` below the summary text, conditionally rendered when a TTS audio URL is available.
-    - Add an image viewer component (lightbox or inline) for the visual aid.
-    - Both should respect the current language selection (TTS audio must match the displayed language).
+6. **Audio Playback & Visuals in Family Viewer** (audio ✅ / visuals pending)
+    - ✅ Audio: "▶ Listen / ⏸ Pause" button on `FamilyPage.tsx`; `<audio>` element auto-plays on URL load; view switches to sentence-highlight mode while playing; resets on language change.
+    - Pending: image viewer component (lightbox or inline) for the visual aid once Feature 5 is built.
 
 7. **Clinician Authentication (AuthGate)** ✅
    - Supabase magic-link (passwordless email) auth on the frontend.
@@ -699,8 +763,9 @@ The following areas lack automated test coverage and carry regression risk:
 
 | Area | Gap | Risk |
 | --- | --- | --- |
-| `frontend/src/lib/markdown.ts` | No unit tests. Edge cases (nested bold/italic, mixed heading levels, empty input) are untested. | Markdown regressions in web view and print output are invisible until a demo. |
-| Frontend integration (E2E) | No Playwright / Cypress tests. `ClinicianPage` and `FamilyPage` flow logic is exercised only by manual testing. | A backend API contract change could silently break the UI. |
+| `frontend/src/lib/markdown.ts` | No unit tests. Edge cases (nested bold/italic, mixed heading levels, empty input, `splitMarkdownSentences` with complex markdown) are untested. | Markdown and sentence-split regressions are invisible until a demo. |
+| Frontend integration (E2E) | No Playwright / Cypress tests. `ClinicianPage`, `FamilyPage`, and TTS playback flow are exercised only by manual testing. | A backend API contract change could silently break the UI. |
 | Auth edge cases | No tests for session expiry mid-workflow, double-tap Approve, or token refresh. | A clinician could lose work or trigger a duplicate approval if their session expires mid-flow. |
 | Translation glossary injection | The `_CLINICAL_GLOSSARY` entries in `llm.py` are present but not asserted to appear in the translation prompt string. | A refactor of `translate_summary` could silently drop the glossary without any test failing. |
 | Print window | No test for QR code SVG generation, print window DOM structure, or CJK font fallback stack. | Print regressions only surface at demo time on a real device. |
+| TTS sentence alignment | `splitMarkdownSentences` (frontend) and `split_sentences` (backend) are tested independently but not cross-validated against each other. If they diverge, the highlighted sentence index could be off by one or more during playback. | Misaligned highlighting is a demo-quality issue, not a functional bug. |
