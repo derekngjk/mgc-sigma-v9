@@ -1,3 +1,16 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Styles for the HTML rendered by markdownToHtml() in the family viewer summary.
+   Font size is set via inline style on the container so A-/A+ controls take effect.
+   Heading sizes use em so they scale proportionally with the chosen font size. */
+.summary-body      { line-height: 1.85; }
+.summary-body p    { @apply mb-4 text-slate-700; }
+.summary-body h1   { font-size: 1.2em; @apply mt-5 mb-2 font-semibold text-slate-900; }
+.summary-body h2   { font-size: 1.1em; @apply mt-4 mb-1 font-semibold text-slate-800; }
+.summary-body h3   { @apply mt-3 mb-1 font-semibold text-slate-800; }
+.summary-body strong { @apply font-semibold text-slate-900; }
+.summary-body em   { @apply italic; }
+.summary-body ul   { @apply mb-4 pl-5; }
+.summary-body li   { @apply text-slate-700 list-disc mb-1; }

@@ -2,7 +2,9 @@ import pytest
 from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 import db
+import main
 from main import app
+from auth import verify_clinician_token
 
 APPROVED_TEXT = "Think of the cancer cells like weeds taking over a garden."
 
@@ -46,7 +48,10 @@ def test_approve_returns_200(
                     "patient_id": "patient-uuid-1",
                     "status": "Approved",
                     "approved_at": "2023-01-01T00:00:00Z",
-                    "patients": {"patient_name": "Tan Mei Ling", "epic_patient_id": "mock-oncology-123"},
+                    "patients": {
+                        "patient_name": "Tan Mei Ling",
+                        "epic_patient_id": "mock-oncology-123",
+                    },
                 }
             ]
         ),
@@ -61,3 +66,47 @@ def test_approve_returns_200(
     assert body["id"] == seeded_comm_id
     assert "/family/" in body["family_link"]
     assert "/member/" in body["family_link"]
+
+
+def test_approve_stores_clinician_id(
+    client: TestClient, seeded_comm_id: str, mock_supabase, mocker
+) -> None:
+    """approved_by_user_id from the JWT is forwarded to update_communication."""
+    app.dependency_overrides[verify_clinician_token] = lambda: {
+        "id": "clinician-uuid-42",
+        "sub": "test-user",
+    }
+
+    mock_supabase.table("care_plan_translations").select().eq().execute.side_effect = [
+        MagicMock(data=[{"id": seeded_comm_id, "status": "Draft", "patients": {}}]),
+        MagicMock(data=[{"id": seeded_comm_id}]),
+        MagicMock(
+            data=[
+                {
+                    "id": seeded_comm_id,
+                    "patient_id": "patient-uuid-1",
+                    "status": "Approved",
+                    "approved_at": "2023-01-01T00:00:00Z",
+                    "patients": {
+                        "patient_name": "Tan Mei Ling",
+                        "epic_patient_id": "mock-oncology-123",
+                    },
+                }
+            ]
+        ),
+    ]
+
+    patched = mocker.patch("main.update_communication", wraps=main.update_communication)
+    resp = client.post(
+        f"/api/communications/{seeded_comm_id}/approve",
+        json={"ai_summary_text": APPROVED_TEXT},
+    )
+
+    app.dependency_overrides[verify_clinician_token] = lambda: {
+        "id": "test-user-id",
+        "sub": "test-user",
+    }
+
+    assert resp.status_code == 200
+    _, kwargs = patched.call_args
+    assert kwargs.get("approved_by_user_id") == "clinician-uuid-42"

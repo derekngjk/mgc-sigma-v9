@@ -2,23 +2,40 @@ import json
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from db import (
     create_communication,
+    create_family_member,
+    get_audio_url,
     get_communication,
     get_family_summary,
+    get_image_url,
     get_latest_approved_communication,
     get_or_create_family,
     get_or_create_primary_member,
+    get_translation,
     init_db,
+    set_audio_url,
+    set_image_url,
+    set_translation,
     update_communication,
+    upload_audio,
+    upload_image,
 )
 from fhir import FHIRError, PatientNotFoundError, fetch_patient_data
 from auth import verify_clinician_token
-from llm import LLMConfigError, LLMError, generate_summary
+from llm import (
+    LLMConfigError,
+    LLMError,
+    VALID_AUDIENCES,
+    generate_summary,
+    translate_summary,
+)
+from tts import generate_tts, split_sentences, strip_markdown
+from image import ImageConfigError, ImageError, generate_visual
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -68,9 +85,13 @@ class PatientResponse(BaseModel):
     condition_diff: ConditionDiff
 
 
+_VALID_LENGTHS = {"short", "medium", "long"}
+
+
 class GenerateRequest(BaseModel):
     comm_id: str
-    target_audience: str = "family"
+    target_audience: str = "patient"
+    length: str = "medium"
 
 
 class GenerateResponse(BaseModel):
@@ -81,6 +102,7 @@ class GenerateResponse(BaseModel):
 
 class ApproveRequest(BaseModel):
     ai_summary_text: str
+    generate_image: bool = False
 
 
 class ApproveResponse(BaseModel):
@@ -95,6 +117,29 @@ class FamilyViewResponse(BaseModel):
     ai_summary_text: str
     approved_at: str
     condition_diff: ConditionDiff
+    image_url: str | None = None
+
+
+class AudioResponse(BaseModel):
+    url: str
+    sentences: list[str]
+
+
+_VALID_LANGS = {"en", "zh", "ms", "ta"}
+
+
+def _generate_and_cache_image(comm_id: str, conditions: list[str], summary_text: str = "") -> None:
+    """Background task: generate visual aid and cache URL. Failures are silent."""
+    print(f"[image] starting generation for {comm_id}, conditions={conditions}")
+    try:
+        image_bytes = generate_visual(conditions, summary_text)
+        url = upload_image(comm_id, image_bytes)
+        set_image_url(comm_id, url)
+        print(f"[image] done for {comm_id}: {url}")
+    except (ImageConfigError, ImageError) as exc:
+        print(f"[image] generation failed for {comm_id}: {exc}")
+    except Exception as exc:
+        print(f"[image] unexpected error for {comm_id}: {exc}")
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -159,6 +204,15 @@ def generate(
     req: GenerateRequest,
     _: dict = Depends(verify_clinician_token),
 ) -> GenerateResponse:
+    if req.length not in _VALID_LENGTHS:
+        raise HTTPException(
+            status_code=400, detail=f"length must be one of: {sorted(_VALID_LENGTHS)}"
+        )
+    if req.target_audience not in VALID_AUDIENCES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"target_audience must be one of: {sorted(VALID_AUDIENCES)}",
+        )
     record = get_communication(req.comm_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Communication record not found")
@@ -167,7 +221,7 @@ def generate(
     )
     try:
         summary = generate_summary(
-            record["raw_clinical_text"], req.target_audience, condition_diff
+            record["raw_clinical_text"], req.target_audience, condition_diff, req.length
         )
     except LLMConfigError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
@@ -186,7 +240,14 @@ def generate(
 
 
 @app.get("/api/communications/{comm_id}", response_model=FamilyViewResponse)
-def get_family_view(comm_id: str) -> FamilyViewResponse:
+def get_family_view(
+    comm_id: str,
+    lang: str = Query(default="en"),
+) -> FamilyViewResponse:
+    if lang not in _VALID_LANGS:
+        raise HTTPException(
+            status_code=400, detail=f"lang must be one of: {sorted(_VALID_LANGS)}"
+        )
     record = get_communication(comm_id)
     if record is None or record["status"] != "Approved":
         raise HTTPException(
@@ -197,12 +258,26 @@ def get_family_view(comm_id: str) -> FamilyViewResponse:
         if record.get("condition_diff")
         else {"added": [], "removed": [], "ongoing": []}
     )
+    summary_text = record["ai_summary_text"]
+    if lang != "en":
+        cached = get_translation(comm_id, lang)
+        if cached is not None:
+            summary_text = cached
+        else:
+            try:
+                summary_text = translate_summary(record["ai_summary_text"], lang)
+            except LLMConfigError as exc:
+                raise HTTPException(status_code=503, detail=str(exc))
+            except LLMError as exc:
+                raise HTTPException(status_code=502, detail=str(exc))
+            set_translation(comm_id, lang, summary_text)
     return FamilyViewResponse(
         id=comm_id,
         patient_name=record["patient_name"],
-        ai_summary_text=record["ai_summary_text"],
+        ai_summary_text=summary_text,
         approved_at=record["approved_at"],
         condition_diff=ConditionDiff(**diff_raw),
+        image_url=get_image_url(comm_id),
     )
 
 
@@ -210,7 +285,7 @@ def get_family_view(comm_id: str) -> FamilyViewResponse:
 def approve_communication(
     comm_id: str,
     req: ApproveRequest,
-    _: dict = Depends(verify_clinician_token),
+    user: dict = Depends(verify_clinician_token),
 ) -> ApproveResponse:
     record = get_communication(comm_id)
     if record is None:
@@ -219,11 +294,30 @@ def approve_communication(
         comm_id,
         ai_summary_text=req.ai_summary_text,
         status="Approved",
+        approved_by_user_id=user.get("id", ""),
     )
     updated = get_communication(comm_id)
     patient_id = updated.get("patient_id", "")
     fid = get_or_create_family(patient_id)
-    mid = get_or_create_primary_member(fid, updated.get("patient_name", ""))
+
+    audience = updated.get("target_audience", "patient")
+    _AUDIENCE_MEMBER_NAMES = {
+        "spouse": "Spouse / Partner",
+        "child": "Adult Child",
+        "caregiver": "Caregiver",
+    }
+    if audience == "patient":
+        mid = get_or_create_primary_member(fid, updated.get("patient_name", ""))
+    else:
+        mid = create_family_member(
+            fid, _AUDIENCE_MEMBER_NAMES.get(audience, audience), audience
+        )
+
+    if req.generate_image:
+        conditions = json.loads(updated.get("conditions_json") or "[]")
+        summary_text = updated.get("ai_summary_text") or ""
+        _generate_and_cache_image(comm_id, conditions, summary_text)
+
     return ApproveResponse(
         id=comm_id,
         approved_at=updated["approved_at"],
@@ -231,8 +325,18 @@ def approve_communication(
     )
 
 
-@app.get("/api/family/{family_id}/member/{member_id}", response_model=FamilyViewResponse)
-def get_family_member_view(family_id: str, member_id: str) -> FamilyViewResponse:
+@app.get(
+    "/api/family/{family_id}/member/{member_id}", response_model=FamilyViewResponse
+)
+def get_family_member_view(
+    family_id: str,
+    member_id: str,
+    lang: str = Query(default="en"),
+) -> FamilyViewResponse:
+    if lang not in _VALID_LANGS:
+        raise HTTPException(
+            status_code=400, detail=f"lang must be one of: {sorted(_VALID_LANGS)}"
+        )
     record = get_family_summary(family_id, member_id)
     if record is None:
         raise HTTPException(
@@ -243,10 +347,83 @@ def get_family_member_view(family_id: str, member_id: str) -> FamilyViewResponse
         if record.get("condition_diff")
         else {"added": [], "removed": [], "ongoing": []}
     )
+    summary_text = record["ai_summary_text"]
+    if lang != "en":
+        cached = get_translation(record["id"], lang)
+        if cached is not None:
+            summary_text = cached
+        else:
+            try:
+                summary_text = translate_summary(record["ai_summary_text"], lang)
+            except LLMConfigError as exc:
+                raise HTTPException(status_code=503, detail=str(exc))
+            except LLMError as exc:
+                raise HTTPException(status_code=502, detail=str(exc))
+            set_translation(record["id"], lang, summary_text)
     return FamilyViewResponse(
         id=record["id"],
         patient_name=record["patient_name"],
-        ai_summary_text=record["ai_summary_text"],
+        ai_summary_text=summary_text,
         approved_at=record["approved_at"],
         condition_diff=ConditionDiff(**diff_raw),
+        image_url=get_image_url(record["id"]),
     )
+
+
+@app.get(
+    "/api/family/{family_id}/member/{member_id}/audio", response_model=AudioResponse
+)
+def get_family_member_audio(
+    family_id: str,
+    member_id: str,
+    lang: str = Query(default="en"),
+) -> AudioResponse:
+    if lang not in _VALID_LANGS:
+        raise HTTPException(
+            status_code=400, detail=f"lang must be one of: {sorted(_VALID_LANGS)}"
+        )
+    record = get_family_summary(family_id, member_id)
+    if record is None:
+        raise HTTPException(
+            status_code=404, detail="Summary not found or not yet approved"
+        )
+    comm_id = record["id"]
+
+    # Resolve the text to convert (translate if needed, reusing the translation cache)
+    summary_text = record["ai_summary_text"]
+    if lang != "en":
+        cached_translation = get_translation(comm_id, lang)
+        if cached_translation is not None:
+            summary_text = cached_translation
+        else:
+            try:
+                summary_text = translate_summary(record["ai_summary_text"], lang)
+            except LLMConfigError as exc:
+                raise HTTPException(status_code=503, detail=str(exc))
+            except LLMError as exc:
+                raise HTTPException(status_code=502, detail=str(exc))
+            set_translation(comm_id, lang, summary_text)
+
+    clean_text = strip_markdown(summary_text)
+    sentences = split_sentences(clean_text)
+
+    # Return cached audio URL if available
+    cached_url = get_audio_url(comm_id, lang)
+    if cached_url:
+        return AudioResponse(url=cached_url, sentences=sentences)
+
+    # Generate, upload, and cache
+    try:
+        audio_bytes = generate_tts(clean_text)
+    except LLMConfigError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"TTS generation failed: {exc}")
+
+    try:
+        url = upload_audio(comm_id, lang, audio_bytes)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Audio upload failed: {exc}")
+
+    set_audio_url(comm_id, lang, url)
+    return AudioResponse(url=url, sentences=sentences)

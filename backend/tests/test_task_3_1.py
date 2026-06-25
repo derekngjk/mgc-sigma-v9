@@ -51,7 +51,9 @@ def test_generate_returns_200(
         MagicMock(data=[{"id": seeded_comm_id}]),  # for update
     ]
 
-    resp = client.post("/api/generate", json={"comm_id": seeded_comm_id})
+    resp = client.post(
+        "/api/generate", json={"comm_id": seeded_comm_id, "target_audience": "patient"}
+    )
     assert resp.status_code == 200
 
 
@@ -77,7 +79,9 @@ def test_generate_stores_summary_in_db(
         MagicMock(data=[{"id": seeded_comm_id}]),  # for update
     ]
 
-    client.post("/api/generate", json={"comm_id": seeded_comm_id})
+    client.post(
+        "/api/generate", json={"comm_id": seeded_comm_id, "target_audience": "patient"}
+    )
 
     # Check that update was called. Since we used side_effect, we can check calls.
     # The second call to execute on care_plan_translations should be the update.

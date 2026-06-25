@@ -1,12 +1,14 @@
 import { useState } from 'react';
+import QRCode from 'react-qr-code';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { markdownToHtml, openPrintWindow, PRINT_FONT } from '../lib/markdown';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Stage = 'idle' | 'fetching' | 'ready' | 'generating' | 'generated' | 'approved';
+type Stage = 'idle' | 'fetching' | 'ready' | 'generating' | 'generated' | 'approving' | 'approved';
 
 interface ConditionDiff {
   added: string[];
@@ -30,33 +32,39 @@ interface PatientData {
 const PATIENTS = [
   {
     id: 'mock-oncology-123',
-    label: 'Elena Vasquez — Breast cancer, stage III (Mock)',
+    label: 'Tan Mei Ling — Breast cancer, stage III (Mock)',
   },
   {
     id: 'mock-cardiology-456',
-    label: 'Marcus Thompson — Heart failure, T2DM (Mock)',
+    label: 'Lim Chong Wei — Heart failure, T2DM, hypertension (Mock)',
   },
   {
     id: 'mock-pediatric-789',
-    label: 'Lily Chen — Paediatric ALL maintenance (Mock)',
+    label: 'Chen Mei Xin — Paediatric ALL, neutropenia (Mock)',
   },
   {
     id: 'mock-neurology-101',
-    label: 'Amara Osei — Relapsing-remitting MS (Mock)',
+    label: 'Priya d/o Krishnan — Relapsing-remitting MS (Mock)',
   },
   {
     id: 'mock-geriatric-202',
-    label: 'Robert Kim — Alzheimer\'s, AFib, osteoporosis (Mock)',
-  },
-  {
-    id: 'eovIMNNn7tHBQwLGAXNRRw3',
-    label: 'eovIMNNn7tHBQwLGAXNRRw3 (Epic Open Sandbox)',
+    label: "Goh Swee Huat — Alzheimer's, AFib, osteoporosis (Mock)",
   },
 ];
 
 const AUDIENCE_OPTIONS = [
-  { value: 'family', label: 'Family' },
-  { value: 'patient', label: 'Patient' },
+  { value: 'patient', label: 'Patient (self)' },
+  { value: 'spouse', label: 'Spouse / Partner' },
+  { value: 'child', label: 'Adult Child' },
+  { value: 'caregiver', label: 'Caregiver' },
+];
+
+type ReportLength = 'short' | 'medium' | 'long';
+
+const LENGTH_OPTIONS: { value: ReportLength; label: string; description: string }[] = [
+  { value: 'short', label: 'Short', description: '~100 words · diagnosis + key treatment only' },
+  { value: 'medium', label: 'Medium', description: '~250 words · diagnosis, treatment plan, what to expect' },
+  { value: 'long', label: 'Long', description: '~450 words · full detail with changes, side effects, next steps' },
 ];
 
 // ── sub-components ────────────────────────────────────────────────────────────
@@ -152,30 +160,39 @@ function ClinicalDataPanel({ patient }: { patient: PatientData }) {
 interface AiDraftPanelProps {
   stage: Stage;
   audience: string;
+  length: ReportLength;
   draftText: string;
   fetchError: string | null;
   generateError: string | null;
   commId: string;
+  generateImage: boolean;
   onAudienceChange: (v: string) => void;
+  onLengthChange: (v: ReportLength) => void;
   onDraftChange: (v: string) => void;
   onGenerate: () => void;
   onApprove: () => void;
+  onGenerateImageChange: (v: boolean) => void;
 }
 
 function AiDraftPanel({
   stage,
   audience,
+  length,
   draftText,
   fetchError,
   generateError,
   commId,
+  generateImage,
   onAudienceChange,
+  onLengthChange,
   onDraftChange,
   onGenerate,
   onApprove,
+  onGenerateImageChange,
 }: AiDraftPanelProps) {
   const canGenerate = stage === 'ready' || stage === 'generated';
   const isGenerating = stage === 'generating';
+  const isApproving = stage === 'approving';
   const canApprove = stage === 'generated' && draftText.trim().length > 0;
 
   return (
@@ -220,6 +237,31 @@ function AiDraftPanel({
           </button>
         </div>
 
+        {/* Report length toggle */}
+        <div className="mb-3">
+          <p className="mb-1.5 text-xs font-medium text-slate-500">Report length</p>
+          <div className="flex gap-1.5">
+            {LENGTH_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => onLengthChange(opt.value)}
+                disabled={isGenerating}
+                title={opt.description}
+                className={`rounded-md border px-3 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  length === opt.value
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-indigo-300 hover:text-indigo-600'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+            <span className="ml-2 self-center text-xs text-slate-400">
+              {LENGTH_OPTIONS.find((o) => o.value === length)?.description}
+            </span>
+          </div>
+        </div>
+
         {generateError && <ErrorBanner message={generateError} />}
         {fetchError && <ErrorBanner message={fetchError} />}
 
@@ -227,7 +269,7 @@ function AiDraftPanel({
         <textarea
           value={draftText}
           onChange={(e) => onDraftChange(e.target.value)}
-          disabled={stage !== 'generated'}
+          disabled={stage !== 'generated' || isApproving}
           placeholder={
             stage === 'ready'
               ? 'Click "Generate Summary" to create an AI draft…'
@@ -246,13 +288,46 @@ function AiDraftPanel({
           </p>
         )}
 
+        {/* Visual aid toggle */}
+        <div className={`mt-3 flex items-center justify-between rounded-lg border px-3 py-2.5 transition-colors ${
+          generateImage ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'
+        } ${!canApprove ? 'opacity-50' : ''}`}>
+          <div>
+            <p className="text-sm font-medium text-slate-700">Visual aid illustration</p>
+            <p className="text-xs text-slate-400">Generated via Nano Banana</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={generateImage}
+            onClick={() => canApprove && onGenerateImageChange(!generateImage)}
+            disabled={!canApprove}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed ${
+              generateImage ? 'bg-emerald-500' : 'bg-slate-300'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                generateImage ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
         {/* Approve */}
         <button
           onClick={onApprove}
-          disabled={!canApprove}
-          className="mt-4 w-full rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+          disabled={!canApprove || isApproving}
+          className="mt-3 w-full rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
         >
-          ✓ Approve &amp; Generate Link
+          {isApproving ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+              {generateImage ? 'Generating image…' : 'Approving…'}
+            </span>
+          ) : (
+            '✓ Approve & Generate Link'
+          )}
         </button>
       </div>
     </div>
@@ -266,13 +341,15 @@ export default function ClinicianPage({ session }: { session: Session }) {
   const [selectedPatientId, setSelectedPatientId] = useState(PATIENTS[0].id);
   const [stage, setStage] = useState<Stage>('idle');
   const [patient, setPatient] = useState<PatientData | null>(null);
-  const [audience, setAudience] = useState('family');
+  const [audience, setAudience] = useState('patient');
+  const [length, setLength] = useState<ReportLength>('medium');
   const [draftText, setDraftText] = useState('');
   const [commId, setCommId] = useState('');
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [approvedLink, setApprovedLink] = useState('');
+  const [generateImage, setGenerateImage] = useState(false);
 
   async function handleFetch() {
     setStage('fetching');
@@ -309,7 +386,7 @@ export default function ClinicianPage({ session }: { session: Session }) {
       const res = await fetch(`${API_BASE}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader },
-        body: JSON.stringify({ comm_id: commId, target_audience: audience }),
+        body: JSON.stringify({ comm_id: commId, target_audience: audience, length }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { detail?: string };
@@ -326,11 +403,12 @@ export default function ClinicianPage({ session }: { session: Session }) {
 
   async function handleApprove() {
     setApproveError(null);
+    setStage('approving');
     try {
       const res = await fetch(`${API_BASE}/api/communications/${commId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader },
-        body: JSON.stringify({ ai_summary_text: draftText }),
+        body: JSON.stringify({ ai_summary_text: draftText, generate_image: generateImage }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { detail?: string };
@@ -341,6 +419,7 @@ export default function ClinicianPage({ session }: { session: Session }) {
       setStage('approved');
     } catch (e) {
       setApproveError(e instanceof Error ? e.message : 'Unknown error');
+      setStage('generated');
     }
   }
 
@@ -435,17 +514,30 @@ export default function ClinicianPage({ session }: { session: Session }) {
       {/* Approved success card */}
       {stage === 'approved' && (
         <div className="mx-auto max-w-2xl px-6 py-16">
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-8">
+          <div id="print-handout" className="rounded-lg border border-emerald-200 bg-emerald-50 p-8">
             <div className="flex items-center gap-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white print:bg-emerald-600">
                 ✓
               </span>
               <h2 className="text-lg font-semibold text-emerald-900">Message Approved</h2>
             </div>
-            <p className="mt-4 text-sm text-emerald-800">
-              Share this link with the patient's family:
-            </p>
-            <div className="mt-3 flex items-center gap-2">
+            {patient && (
+              <p className="mt-2 text-sm font-medium text-emerald-800">
+                {patient.patient_name} &mdash; {patient.dob} &bull; {patient.gender}
+              </p>
+            )}
+
+            {/* QR code */}
+            <div className="mt-6 flex flex-col items-center gap-3 rounded-md border border-emerald-200 bg-white p-6">
+              <QRCode value={approvedLink} size={160} />
+              <p className="text-center text-xs text-slate-500">
+                Scan to open the care summary on a phone or tablet
+              </p>
+            </div>
+
+            {/* Copyable link */}
+            <p className="mt-5 text-sm text-emerald-800">Or share the link directly:</p>
+            <div className="mt-2 flex items-center gap-2">
               <input
                 readOnly
                 value={approvedLink}
@@ -453,26 +545,64 @@ export default function ClinicianPage({ session }: { session: Session }) {
               />
               <button
                 onClick={() => navigator.clipboard.writeText(approvedLink)}
-                className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+                className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 print:hidden"
               >
                 Copy
               </button>
             </div>
-            <button
-              onClick={() => {
-                setStage('idle');
-                setPatient(null);
-                setDraftText('');
-                setCommId('');
-                setApprovedLink('');
-                setApproveError(null);
-                setFetchError(null);
-                setGenerateError(null);
-              }}
-              className="mt-6 text-sm text-emerald-700 underline hover:text-emerald-900"
-            >
-              Start New Patient
-            </button>
+
+            {/* Actions */}
+            <div className="mt-6 flex items-center gap-4">
+              <button
+                onClick={() => {
+                  const bodyHtml = markdownToHtml(draftText);
+                  openPrintWindow(`<!doctype html><html><head>
+<meta charset="utf-8"/>
+<title>Care Summary — ${patient?.patient_name ?? 'Patient'}</title>
+<style>
+  body{font-family:${PRINT_FONT};padding:2.5rem;color:#1e293b;max-width:600px;margin:0 auto}
+  .title{font-size:1.25rem;font-weight:600;margin:0 0 .25rem}
+  .meta{font-size:.875rem;color:#475569;margin:0 0 1.5rem}
+  .divider{border:none;border-top:1px solid #e2e8f0;margin:1.25rem 0}
+  h1{font-size:1.2rem;font-weight:700;margin:1.25rem 0 .4rem;color:#0f172a}
+  h2{font-size:1.05rem;font-weight:600;margin:1rem 0 .3rem;color:#1e293b}
+  h3{font-size:1rem;font-weight:600;margin:.75rem 0 .25rem;color:#334155}
+  p{font-size:1rem;line-height:1.7;color:#334155;margin:0 0 .875rem}
+  strong{font-weight:600;color:#0f172a}
+  em{font-style:italic}
+  ul{margin:0 0 .875rem;padding-left:1.25rem}
+  li{font-size:1rem;line-height:1.7;color:#334155;margin-bottom:.25rem}
+  .footer{margin-top:2rem;font-size:.75rem;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:.75rem}
+</style>
+</head><body>
+<p class="title">Care Summary</p>
+<p class="meta">${patient?.patient_name ?? ''} &mdash; ${patient?.dob ?? ''} &bull; ${patient?.gender ?? ''}</p>
+<hr class="divider"/>
+${bodyHtml}
+<div class="footer">Reviewed and approved by your care team. Synthetic data only.</div>
+</body></html>`);
+                }}
+                className="rounded-md border border-emerald-600 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+              >
+                Print Handout
+              </button>
+              <button
+                onClick={() => {
+                  setStage('idle');
+                  setPatient(null);
+                  setDraftText('');
+                  setCommId('');
+                  setApprovedLink('');
+                  setApproveError(null);
+                  setFetchError(null);
+                  setGenerateError(null);
+                  setGenerateImage(false);
+                }}
+                className="text-sm text-emerald-700 underline hover:text-emerald-900"
+              >
+                Start New Patient
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -484,14 +614,18 @@ export default function ClinicianPage({ session }: { session: Session }) {
           <AiDraftPanel
             stage={stage}
             audience={audience}
+            length={length}
             draftText={draftText}
             fetchError={null}
             generateError={generateError ?? approveError}
             commId={commId}
+            generateImage={generateImage}
             onAudienceChange={setAudience}
+            onLengthChange={setLength}
             onDraftChange={setDraftText}
             onGenerate={handleGenerate}
             onApprove={handleApprove}
+            onGenerateImageChange={setGenerateImage}
           />
         </div>
       )}

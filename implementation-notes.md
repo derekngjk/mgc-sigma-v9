@@ -429,37 +429,343 @@ The family viewer URL was restructured from `/family/{comm_id}` (a single opaque
 
 ---
 
+## Feature 3 — Multilingual Translation (EN / ZH / MS / TA)
+
+**Files:** `backend/llm.py`, `backend/db.py`, `backend/main.py`, `backend/tests/test_translation.py`, `backend/tests/test_translation_db.py`, `backend/tests/test_translation_routes.py`, `frontend/src/pages/FamilyPage.tsx`
+
+### What was built
+
+Approved English summaries can now be read in Singapore's four official languages. A language toggle (`EN` / `中文` / `BM` / `தமிழ்`) appears on the family viewer page. Translations are generated on first request (lazy) and cached in a new `translations_json` JSONB column so subsequent requests for the same language are instant. The same `?lang=` query parameter works on both `GET /api/family/{fid}/member/{mid}` and the legacy `GET /api/communications/{id}` endpoint.
+
+### Translation provider decision
+
+**LLM instead of a dedicated translation API:** Azure AI Translator and Google Cloud Translation were both evaluated. Azure was preferred on cost ($10/M chars vs $20/M chars) and simpler auth (single API key vs Service Account JSON). However, both require additional billing credentials. Since the project already has LLM API keys wired up, `translate_summary` reuses the existing `_call_llm` dispatch — no new credentials or services are needed. The LLM also produces more natural-sounding output than a statistical translation model, which matters for patient-facing prose that must preserve a warm, empathetic tone.
+
+**Rejected: Azure Dynamic Dictionary for glossary injection:** Azure's per-request glossary mechanism requires embedding `<mstrans:dictionary>` XML markup in the source text and sending `textType=html`. This is documented as "safe for proper nouns only" and does not work reliably for common medical nouns. The LLM prompt approach is more flexible: the glossary is injected as plain text and the model applies it contextually, handling plurals, case, and sentence position correctly.
+
+### Glossary decisions
+
+**Source: HealthHub A–Z Medications Glossary + Cambridge Dictionary.** HealthHub (healthhub.sg) is the MOH Singapore patient portal and publishes health content in all four official languages. The Cambridge Dictionary bilingual entries for English→Chinese Simplified, English→Malaysian, and English→Tamil were used as a secondary verification source for common clinical terms. Official institution names (NCCS, SGH) were sourced from their respective websites. Every entry in `_CLINICAL_GLOSSARY` in `llm.py` is annotated with which source it came from.
+
+**13 terms × 3 languages, injected into the prompt:** The glossary is formatted as a plain-text reference block (`en_term → target_term`) and embedded in the translation prompt under a "Medical term reference (use these translations)" heading. This ensures the LLM uses the Singapore-specific translation (e.g. `palliative care → 舒缓治疗` per MOH/SingHealth, not `姑息治疗` as used in mainland China) rather than its training-data default. The glossary covers the most likely terms to appear in any of the five mock patient scenarios.
+
+**Condition diff section not translated:** The condition names in `ChangesSection` on the family viewer come directly from FHIR and are stored as English strings. Translating them would require a separate pass and risk inconsistency with clinical identifiers. They are left in English — clinically meaningful to care teams and recognisable to most patients by name.
+
+### Schema decisions
+
+**`translations_json JSONB DEFAULT '{}'` column on `care_plan_translations`:** A single JSONB column stores all language translations for a record as `{"zh": "...", "ms": "...", "ta": "..."}`. Alternatives considered:
+
+| Option | Verdict |
+| --- | --- |
+| Separate `translations` table with `(comm_id, lang, text)` rows | Overkill for 3 languages; adds a join to every family-viewer request |
+| One column per language (`ai_summary_zh`, `ai_summary_ms`, `ai_summary_ta`) | Rigid schema; adding a language requires a migration |
+| Single JSONB column | Zero joins, arbitrary languages without schema changes, easy to inspect |
+
+**Idempotent migration via `ADD COLUMN IF NOT EXISTS`:** `init_db` adds the column to the `CREATE TABLE` definition (for fresh databases) and also runs `ALTER TABLE care_plan_translations ADD COLUMN IF NOT EXISTS translations_json JSONB DEFAULT '{}'` (a no-op on fresh databases, a live migration on existing ones). This follows the same migration pattern established in the condition-change-tracking cross-cutting section.
+
+### API design decisions
+
+**Lazy translation via `?lang=` query parameter:** Translation is triggered on the first family-viewer request for a given language, not at approval time. This keeps the approval step fast (no LLM calls beyond the summary itself) and means unused languages never incur a cost. The same endpoint is used for all languages — the frontend just appends `?lang=zh` etc. on language switch.
+
+**Cache check before LLM call:** `get_translation(comm_id, lang)` is a lightweight single-column Supabase query. On a cache hit it returns immediately. On a miss, `translate_summary` is called, then `set_translation` writes the result back. Subsequent requests for the same language are served from the cache.
+
+**Invalid lang → 400, LLM failure → 502/503:** `_VALID_LANGS = {"en", "zh", "ms", "ta"}` is checked at route entry before touching the DB. An unrecognised lang code (e.g. `?lang=fr`) returns 400 immediately. LLM errors map to the same 502/503 pattern used by `POST /api/generate`.
+
+**`lang="en"` short-circuits entirely:** When `lang="en"` (the default), neither `get_translation` nor `set_translation` are called. The English `ai_summary_text` is returned directly. This avoids a Supabase round-trip on every standard (English) family-viewer load.
+
+### Frontend decisions
+
+**`summaryText` decoupled from `data.ai_summary_text`:** `data` is set once on initial load and holds all metadata (patient name, approved date, condition diff). `summaryText` is a separate state string that starts as `data.ai_summary_text` and is updated independently on each language switch. This avoids mutating `data` and keeps the metadata (patient name, condition diff) visible and stable while the summary text swaps.
+
+**`lang` committed on success only:** `setLang(newLang)` is called only after the fetch succeeds. If the translation request fails, `lang` stays pointing at the last successfully displayed language, so the active button remains correct.
+
+**Opacity fade during translation:** The summary container's opacity drops to 40% while `translating` is true, giving the user a clear signal that the current text is being replaced. A spinner appears inline in the button row — not a full-screen overlay — so the patient name, date, and condition diff remain readable while waiting.
+
+**`translating` guard prevents concurrent requests:** `handleLangChange` returns early if `translating` is already true. This prevents double-tapping or rapid switching from firing multiple in-flight LLM calls.
+
+### Testing decisions
+
+**Three test files for three layers:** `test_translation.py` tests the LLM prompt logic in `llm.py` (mocking `_call_llm`); `test_translation_db.py` tests `get_translation` and `set_translation` against the Supabase mock; `test_translation_routes.py` tests the route-level behaviour (lang validation, cache hit, cache miss, error mapping) by monkeypatching `main.*` functions directly.
+
+**Route tests monkeypatch `main.*`, not the Supabase chain:** The route tests patch `main.get_family_summary`, `main.get_translation`, `main.translate_summary`, and `main.set_translation` at the `main` module's namespace (not the source modules). This is necessary because `main.py` uses `from db import ...` and `from llm import ...` — the name bindings in `main` are fixed at import time, so patching the source module would not affect `main`'s references.
+
+**`lang` committed on success tested explicitly:** `test_family_member_cache_miss_translates_and_caches` asserts that `set_translation` is called with exactly `("comm-001", "zh", ZH_TEXT)` — verifying both that the result is cached and that the correct comm_id and lang code are written.
+
+---
+
+## Feature 8 — Delivery Stub (QR Code + Print Handout)
+
+**Files:** `frontend/src/pages/ClinicianPage.tsx`, `frontend/src/pages/FamilyPage.tsx`, `frontend/src/lib/markdown.ts`, `frontend/src/index.css`
+
+### What was built
+
+After a clinician approves a summary, the success card on the clinician dashboard now shows a QR code of the family magic link alongside the existing copy-to-clipboard URL. Both the clinician dashboard and the family/patient viewer gained a **Print Handout** / **Print summary** button that opens a dedicated print window containing the formatted summary text (headings, bold, lists preserved), the patient name, and a footer. The family viewer also gained A−/A+ font size controls that carry through into the print output.
+
+### Clinician success card decisions
+
+**QR code via `react-qr-code`:** The library renders a pure SVG — no canvas, no network call, no server-side generation. The SVG is injected directly into the print window so the printed QR code is a vector graphic at full resolution, not a rasterised screenshot.
+
+**Print shows the summary text, not the QR:** The clinician handout is intended as a paper copy of the care summary to give to the patient at the point of care. The QR code is shown on-screen for point-of-care handoff; the printout contains the approved draft text so the clinician has a readable record.
+
+### Family viewer decisions
+
+**Print button placement:** The "Print summary" button is placed below the condition-changes section — after the patient has read the full summary — rather than at the top. This matches the reading order and avoids the button being the first thing a patient sees.
+
+**Font size controls (A− / A+):** Font size steps from 14px to 26px in 2px increments, defaulting to 18px (slightly above browser default for accessibility). The controls sit inline at the right of the language toggle row so they are discoverable without occupying a separate row. The chosen size is passed directly into the print window CSS so the printed PDF reflects exactly what the patient was reading on screen.
+
+### Print window implementation decisions
+
+**`Blob` + `URL.createObjectURL` instead of `document.write`:** `document.write` ignores `<meta charset="utf-8">` because that tag only instructs the browser how to decode bytes from a URL — `document.write` passes an already-decoded JS string and uses a legacy code path that does not respect the charset hint. Creating a `Blob` with `{ type: 'text/html;charset=utf-8' }` forces the browser to decode the blob's bytes as UTF-8 from the start, which correctly renders Chinese, Tamil, and Malay characters.
+
+**Print triggered from inside the document via `window.onload`:** `win.addEventListener('load', ...)` on a cross-origin popup is unreliable — the event may fire before the listener is registered. Injecting `<script>window.onload=function(){window.print()}<\/script>` into the HTML body means the print dialog is triggered from within the document's own execution context, which is universally reliable.
+
+**CJK font fallbacks:** `system-ui` alone dropped Chinese and Tamil glyphs on some systems (particularly Windows, where `system-ui` maps to Segoe UI). The print font stack explicitly includes `'PingFang SC'`, `'Hiragino Sans GB'`, `'Microsoft YaHei'`, and `'Noto Sans CJK SC'` as fallbacks. The same stack is exported from `lib/markdown.ts` as `PRINT_FONT` and shared by both print handlers.
+
+**Shared `lib/markdown.ts`:** `markdownToHtml`, `openPrintWindow`, `PRINT_FONT`, and `stripMarkdown` live in a single shared module imported by both `ClinicianPage` and `FamilyPage`. This ensures both print handlers stay in sync and eliminates the duplicated strip-and-split logic that previously lived inline in each component.
+
+### Markdown rendering decisions
+
+**`dangerouslySetInnerHTML` + `markdownToHtml` for the web view:** An earlier implementation maintained parallel JSX rendering functions (`renderMarkdown`, `renderInline`) alongside the HTML-string `markdownToHtml` used by the print window. This meant two separate renderers had to be kept in sync. Replacing them with a single `markdownToHtml` call and `dangerouslySetInnerHTML` gives both the web view and the print window a single rendering path. The LLM-generated content is not user-supplied input, so the XSS risk is low for a PoC; a production deployment would add DOMPurify sanitisation.
+
+**Headings use `em` units in both web and print CSS:** Absolute `px`/`rem` heading sizes would not scale with the A−/A+ font size control. Switching to `font-size: 1.2em` / `1.1em` means headings always stay proportionally larger than body text regardless of the chosen base size.
+
+**Translation prompt preserves Markdown markers:** The translation prompt instructs the LLM to "preserve all Markdown formatting markers exactly as they appear (`**bold**`, `*italic*`, `## headings`, `- list items`)". Without this, translations stripped all formatting, making the Chinese/Tamil/Malay output visually flat compared to the bolded English original. Keeping the markers ensures `markdownToHtml` produces consistent HTML structure across all languages.
+
+**`max_tokens=4096` for translation calls:** Tamil Unicode characters cost 2–4 tokens each in most LLM tokenizers, and Malay has longer average word lengths than English. The default `max_tokens=1024` caused Malay and Tamil translations to be cut off mid-sentence. Translation calls now pass `max_tokens=4096` to `_call_llm` while summary generation retains the `1024` default. The `_call_llm` signature was updated to accept `max_tokens` as a keyword argument; test mocks were updated to accept `**kwargs` accordingly.
+
+---
+
+## Feature 9 — Audience-Specific Reports
+
+**Files:** `backend/llm.py`, `backend/db.py`, `backend/main.py`, `frontend/src/pages/ClinicianPage.tsx`, `backend/tests/test_task_3_1.py`
+
+### What was built
+
+The `target_audience` field was expanded from a binary `"patient" | "family"` toggle to four specific recipient types: `"patient"`, `"spouse"`, `"child"`, `"caregiver"`. Each type has a distinct LLM prompt instruction block that shapes tone, framing, and content focus. The clinician selects the intended recipient before generating — the resulting summary and approval link are specific to that person. Running the flow twice for the same patient (once for `"patient"`, once for `"spouse"`) produces two separately written summaries, each with their own unique `/family/:fid/member/:mid` link.
+
+### Why audience-specific, not just "family"
+
+The original `"family"` option was too broad. A spouse supporting a partner through chemotherapy needs different information than an adult child managing a parent's care from a distance, which is again different from a hired caregiver monitoring daily symptoms. Collapsing these into one prompt produced generic text that was neither emotionally appropriate nor practically useful for any specific reader. The audience-specific model lets the LLM tune:
+
+- **patient** — second-person ("you"), empowering, focuses on what the patient is experiencing and what their team is doing
+- **spouse** — third-person about the patient, emphasises shared emotional burden, practical caregiving tips, and when to call the team
+- **child** — acknowledges the parent-child role reversal, balances practical support with emotional reassurance
+- **caregiver** — most clinical of the four; prioritises symptoms to monitor, red-flag signs, and actionable daily guidance over emotional framing
+
+### LLM prompt decisions
+
+**`_SYSTEM_PROMPT_BASE` + `_AUDIENCE_INSTRUCTIONS` dict:** The previous single `_SYSTEM_PROMPT` string used `.format(target_audience=target_audience)` to interpolate the audience label. This produced text like "empathetic language that a family can understand" — a weak instruction that the model largely ignored. Replacing it with a dedicated `_AUDIENCE_INSTRUCTIONS` dict gives each audience type a full paragraph of specific framing guidance, which produces measurably more differentiated output.
+
+**`VALID_AUDIENCES` exported from `llm.py`:** The set of valid audience values lives in `llm.py` alongside the prompt logic that depends on it — not duplicated in `main.py`. `main.py` imports and uses it for route validation. This means adding a new audience type in the future requires one change (adding an entry to `_AUDIENCE_INSTRUCTIONS`) rather than two.
+
+**Markdown formatting enabled in base prompt:** The old `_SYSTEM_PROMPT` ended with "Return plain text only — do not use Markdown". This was a holdover from before `markdownToHtml` and the print window existed. It was removed; the base prompt now explicitly asks for `**bold**`, `## headings`, and `- lists`, consistent with how the family viewer already renders output.
+
+### DB and route decisions
+
+**`create_family_member` is non-idempotent; `get_or_create_primary_member` stays idempotent:** The `"patient"` audience maps to the existing idempotent primary-member creation — re-approving a patient-targeted summary reuses the same stable link. All other audience types call the new `create_family_member`, which always inserts a fresh row. This is intentional: a family might have two adult children who each need their own link, and idempotency on `relationship="child"` would incorrectly collapse them. The clinician runs the full generate-and-approve flow once per intended recipient.
+
+**`_AUDIENCE_MEMBER_NAMES` inline in the route:** The mapping from audience value to display name (`"spouse" → "Spouse / Partner"` etc.) lives inline in `approve_communication` rather than in `db.py`. It is presentation logic (what name appears on the `family_members` row for identification) and does not belong in the data layer.
+
+**`GenerateRequest.target_audience` default changed to `"patient"`:** The old default of `"family"` became invalid. `"patient"` is the most common clinical use-case and the safest default — a summary written for the patient is appropriate for the patient to also share with family if they choose.
+
+### Testing decisions
+
+**Existing `test_task_3_1.py` tests updated:** Both generate tests previously omitted `target_audience`, relying on the `"family"` default. They were updated to pass `"patient"` explicitly. This is the right level of precision — the tests are verifying generate-path behaviour, not audience logic, so a valid concrete value is better than relying on a default.
+
+**No new prompt-content tests for audience framing:** The audience instruction strings are long-form prose injected into the prompt. Testing that a specific word appears in the prompt (as done for `condition_diff` injection) would be brittle — any wording change would break the test. The correct validation of audience-specific output is a human judgement call during demo review, not an assertion over prompt text.
+
+---
+
+## Feature 11 — Audit Trail
+
+**Files:** `backend/db.py`, `backend/main.py`, `backend/tests/conftest.py`, `backend/tests/test_task_4_2.py`
+
+### What was built
+
+A single nullable UUID column, `approved_by_user_id`, was added to `care_plan_translations`. It is populated from the Supabase Auth user ID present in the validated JWT whenever a clinician approves a communication. The column records which clinician account triggered each approval, without changing any existing fields or response shapes.
+
+### Why only `approved_by_user_id`
+
+The roadmap noted three audit gaps: who approved, which patient, and when. `patient_id` was already a FK on every row. `approved_at` was already set on approval. The only missing field was the clinician's identity. One additive column closes the gap without a schema rework.
+
+### Implementation decisions
+
+**Idempotent `ALTER TABLE` migration rather than a schema change to `CREATE TABLE`:** The `CREATE TABLE IF NOT EXISTS` block is the original schema; it is not edited. A separate `ADD COLUMN IF NOT EXISTS` statement runs after it. This pattern, already used for `translations_json`, means the migration is safe to run against both a fresh database (where the column is created as part of the initial table) and any existing database (where Postgres silently skips the `ALTER` if the column is already present).
+
+**`_UPDATABLE_FIELDS` whitelist extended:** `update_communication` filters kwargs through `_UPDATABLE_FIELDS` before passing them to Supabase. Adding `"approved_by_user_id"` to the set is sufficient to allow the approve route to write the value — no new DB function is needed.
+
+**`user.get("id", "")` over `user["id"]`:** The Supabase Auth `/auth/v1/user` response always includes `id`, but `.get` with a fallback guards against malformed or unexpected token shapes without raising a `KeyError` mid-request. The empty string fallback is safe: a UUID column storing `""` would fail Postgres type validation and be caught at the DB layer, making the failure visible rather than silent.
+
+**No response shape change:** `ApproveResponse` still returns `id`, `approved_at`, and `family_link`. `approved_by_user_id` is an internal audit field — it is not part of the clinician-facing response and does not need to be exposed to the frontend.
+
+### Testing decisions
+
+**`conftest.py` mock user updated to include `"id"`:** The session-scoped `override_auth` fixture previously returned `{"sub": "test-user"}`. The Supabase user object always includes both `sub` and `id`; the mock now returns `{"id": "test-user-id", "sub": "test-user"}` to match the real shape and prevent `user.get("id")` from silently returning `None` in tests.
+
+**`test_approve_stores_clinician_id` patches `main.update_communication`:** The test overrides the auth dependency to inject a known user ID (`"clinician-uuid-42"`), then patches `main.update_communication` with `wraps=` so the real function still executes. After the request completes, `call_args.kwargs` is inspected to assert `approved_by_user_id == "clinician-uuid-42"`. This approach tests the route-level wiring (that the user ID is extracted from the token and forwarded) without requiring a live database.
+
+### Verifying the change in a live environment
+
+#### 1. Confirm the column exists after startup
+
+Start the backend and check the schema directly:
+
+```bash
+cd backend
+source .env
+psql "$SUPABASE_DB_URL" -c "\d care_plan_translations" | grep approved
+```
+
+Expected output:
+
+```text
+ approved_at            | timestamp with time zone |
+ approved_by_user_id    | uuid                     |
+```
+
+If `approved_by_user_id` is not listed, the migration did not run — check that `SUPABASE_DB_URL` is set and that the backend started without errors.
+
+#### 2. Run an approval and confirm the column is populated
+
+Complete a full flow in the clinician UI (fetch patient → generate → approve). Then query the latest approved row:
+
+```bash
+psql "$SUPABASE_DB_URL" -c \
+  "SELECT id, approved_at, approved_by_user_id
+   FROM care_plan_translations
+   WHERE status = 'Approved'
+   ORDER BY approved_at DESC
+   LIMIT 1;"
+```
+
+`approved_by_user_id` should contain your Supabase Auth user UUID. It matches the value in **Authentication → Users** in the Supabase dashboard.
+
+---
+
+## Feature 12 — Text-to-Speech + Synchronized Sentence Highlighting
+
+**Files:** `backend/tts.py` (new), `backend/db.py`, `backend/main.py`, `backend/tests/test_tts.py` (new), `frontend/src/lib/markdown.ts`, `frontend/src/pages/FamilyPage.tsx`
+
+### What was built
+
+Approved summaries can now be listened to in all four supported languages. A "▶ Listen / ⏸ Pause" button appears on the family viewer. On first tap, the backend generates an MP3 via OpenAI TTS, uploads it to Supabase Storage, caches the public URL in the database, and returns it alongside a sentence list. While playing, the summary view switches from the normal markdown-rendered layout to a sentence-by-sentence reader where the currently spoken sentence glows amber. When the audio ends or is paused, the view reverts to the normal markdown display. Subsequent taps for the same language return the cached Storage URL instantly — no re-generation.
+
+### Provider decision
+
+**OpenAI `tts-1`, voice `alloy`:** Three providers were available (`tts-1`, ElevenLabs, Azure Neural TTS). OpenAI was chosen because it is already in `requirements.txt` (no new dependency), `tts-1` handles all four Singapore languages natively without per-language voice configuration, and `alloy` is the most neutral voice — appropriate for a medical context where a strongly gendered or expressive voice would feel out of place. ElevenLabs produces higher-quality audio but adds billing credentials and a new SDK. Azure Neural TTS has the best per-language voice fidelity but the most complex setup.
+
+### Storage decision
+
+**Supabase Storage bucket `tts-audio` (public read):** Audio files are binary blobs; storing base64 in a JSONB column was considered and rejected — a medium-length summary at `tts-1` bitrate is ~400 KB, which would bloat the row significantly and make SELECT queries slower even when audio is not requested. Supabase Storage keeps the database rows thin and lets the browser stream the MP3 directly from the CDN URL without proxying through the backend. The bucket is public read (so the family viewer can `<audio src="...">` without an auth header) but write access requires the service role key — correctly enforced by Supabase's default Storage RLS.
+
+**Service role key required for uploads:** The publishable (anon) key is blocked from Storage uploads by Supabase's default RLS. The backend's `SUPABASE_KEY` must be the `sb_secret_...` service role key. This is already the correct key for a server-side backend — the anon key is intended for browser clients only.
+
+### Schema decision
+
+**`audio_urls_json JSONB DEFAULT '{}'` column on `care_plan_translations`:** Mirrors the `translations_json` pattern exactly. Structure: `{"en": "https://...mp3", "zh": "https://...mp3"}`. Cached per `comm_id + lang` — re-approving a record creates a new `comm_id`, which naturally invalidates the audio cache for that record (the new summary text may differ). Added via idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, consistent with all prior schema migrations.
+
+### `tts.py` module decisions
+
+**`strip_markdown(text)` is a Python port of `frontend/src/lib/markdown.ts:stripMarkdown()`:** The two functions apply identical regex operations (remove `#` headings, `**bold**`, `*italic*`, `- list` markers). Keeping them in sync is intentional — both strip the same syntax, so TTS input and the sentence-splitting done on the frontend operate on equivalent plain text.
+
+**`split_sentences(text)` splits on newlines then on `[.!?]` boundaries:** The function first splits on `\n` (so each heading or list item becomes its own candidate) then applies a lookbehind split on sentence-ending punctuation within each line. This two-pass approach correctly handles markdown structure where each heading is a single "sentence" even without terminal punctuation, while also correctly breaking long prose paragraphs into individual sentences. The backend produces this list and returns it with the audio URL so the frontend can use it for proportional timing.
+
+**`generate_tts(text)` takes only the clean stripped text, no `lang` parameter:** OpenAI `tts-1` auto-detects the language from the input text. There is no `language` parameter on the API. This means the correct flow for non-English audio is: translate first (reusing the existing translation cache), then strip markdown from the translated text, then TTS. The endpoint handles this sequencing.
+
+### API design decisions
+
+**`GET /api/family/{fid}/member/{mid}/audio?lang=` — no auth guard:** The family viewer is a public page (no login required). Audio is an extension of the approved summary text, which is already publicly accessible at the same URL without `?lang=`. Gating audio behind auth would break the use case (a family member tapping "Listen" on their phone).
+
+**Endpoint returns `{url, sentences}` together:** The frontend needs both the audio URL (to set `<audio src>`) and the sentence list (for proportional timing) at the same time. Splitting these into two requests would add latency and a second loading state. Since `split_sentences` is cheap (no I/O), computing and returning it alongside the URL costs nothing.
+
+**Translation cache reused before TTS:** For non-English audio, the endpoint first checks `get_translation(comm_id, lang)`. If the translation already exists (from the user having toggled the language earlier), it is used directly. If not, `translate_summary` is called and cached via `set_translation` before generating audio. This means the translation and audio caches stay in sync and the same translated text is both displayed and spoken.
+
+**Cache check before generation:** `get_audio_url(comm_id, lang)` is checked before calling `generate_tts`. On a cache hit, `sentences` are still recomputed from the current `summaryText` (cheap, deterministic from the stored text) and returned with the cached URL. This avoids storing the sentence list separately while still serving the full response shape.
+
+### Frontend decisions
+
+**`splitMarkdownSentences` added to `lib/markdown.ts` (exported):** The frontend splits `summaryText` independently using the same algorithm as the backend's `split_sentences` — newlines first, then `[.!?]` boundary splits. This means `displaySentences.length === sentences.length` always holds (same algorithm, different input: the frontend splits the original markdown text, the backend splits the stripped text, but sentence boundaries are determined by punctuation/newlines that exist in both). The backend's `sentences` list is used purely for proportional timing; the frontend's `splitMarkdownSentences(summaryText)` is used purely for display.
+
+**`inlineToHtml` exported from `lib/markdown.ts`:** Previously unexported. The highlight view renders each display sentence through `inlineToHtml` to preserve `**bold**` → `<strong>` and `*italic*` → `<em>` inline formatting. This avoids the full `markdownToHtml` block-level parser (which produces `<p>` and `<ul>` wrappers that would conflict with the per-sentence span rendering) while still giving correct inline formatting.
+
+**Three rendering cases in the highlight view:** Headings (`/^#{1,3}\s+/`), list items (`/^[-*+]\s+/`), and plain text sentences are rendered as distinct JSX elements. Headings become `<div>` with bold weight and margin classes that mirror the CSS in `markdownToHtml`'s heading output. List items become a flex row with a bullet dot, matching the visual rhythm of the normal markdown list. Plain sentences are inline `<span>` elements so consecutive sentences in a paragraph flow together naturally without forced line breaks between them.
+
+**View switches between markdown and highlight mode:** When `isPlaying` is true (or audio has been loaded but is paused), the `dangerouslySetInnerHTML` markdown view is replaced by the sentence-span view. When audio ends or is stopped, the view reverts. This avoids the complexity of injecting `<span>` wrappers into the already-rendered markdown HTML via DOM manipulation — a simpler, more maintainable approach for a PoC.
+
+**Proportional char-based timing:** The audio `timeupdate` event fires on `HTMLAudioElement`; `currentTime / duration * totalChars` gives a char-position in the stripped text. A linear scan of `charOffsets` (cumulative char counts per sentence) finds the current sentence index. This is an approximation — TTS speaking rate is not perfectly proportional to character count — but it produces visibly accurate highlighting for the kinds of sentences in a medical summary (similar sentence lengths, no extremely long run-ons). `charOffsets` is computed once when `audioUrl` is set and captured by the `useEffect` closure.
+
+**Audio state reset on language change:** When `handleLangChange` is called, `audioUrl`, `sentences`, `currentSentenceIdx`, and `isPlaying` are all cleared before the translation fetch begins. This prevents a race where a new language is displayed but the old language's audio continues playing with stale sentence highlighting.
+
+### Testing decisions
+
+**11 tests across three layers:** `test_strip_markdown_*` and `test_split_sentences_*` test the pure utility functions directly (no mocking needed). `test_generate_tts_*` tests the OpenAI API call with a monkeypatched `generate_tts` and a direct import reload to test the key-check branch. Endpoint tests monkeypatch `main.get_audio_url`, `main.generate_tts`, `main.upload_audio`, and `main.set_audio_url` — consistent with the monkeypatching-at-`main`-namespace pattern established in `test_translation_routes.py`.
+
+**`test_audio_endpoint_cache_hit_skips_generation`:** Verifies that when `get_audio_url` returns a URL, `generate_tts` is never called. This is the most important behavioral property of the caching layer — without this test, a future refactor could silently re-generate audio on every request.
+
+**`test_generate_tts_missing_key_raises` uses `importlib.reload`:** The `OPENAI_API_KEY` presence is checked at call time via `os.environ.get`. Monkeypatching `delenv` and then reloading the module ensures the module-level state is clean before the test. This is the same pattern used in `test_translation.py` for `LLMConfigError` on missing provider keys.
+
+---
+
 ## Feature Roadmap & TODOs
 
 The following core features are required to align the current proof-of-concept with the target functional architecture:
 
 1. **Database Migration to Supabase (HIPAA Compliant)** ✅
-   * Migrate the local SQLite schema to Supabase (Postgres).
-   * Establish tables for `patients` and `care_plan_translations`. (Next: `profiles`, `clinics`, `families`).
+   - Migrate the local SQLite schema to Supabase (Postgres).
+   - Establish tables for `patients` and `care_plan_translations`. (Next: `profiles`, `clinics`, `families`).
 
 2. **Update Family Access Route** ✅
-   * Refactor the frontend router and backend endpoints to use the secure, structured `/family/:fid/member/:mid` path.
-   * Implement token-based validation for family member access.
+   - Refactor the frontend router and backend endpoints to use the secure, structured `/family/:fid/member/:mid` path.
+   - Implement token-based validation for family member access.
 
-3. **Multilingual Translation**
-   * Integrate translation services to translate approved summaries into Singapore's official languages: English (EN), Chinese (ZH), Malay (MS), and Tamil (TA).
-   * Incorporate a clinical glossary to ensure translation accuracy of medical terms.
+3. **Multilingual Translation** ✅
+   - Integrate translation services to translate approved summaries into Singapore's official languages: English (EN), Chinese (ZH), Malay (MS), and Tamil (TA).
+   - Incorporate a clinical glossary to ensure translation accuracy of medical terms.
 
-4. **Text-to-Speech (TTS) Generation**
-   * Integrate a TTS engine to synthesize audio (MP3) of the translated summaries.
-   * Store generated audio files in Supabase Storage or AWS S3.
+4. **Text-to-Speech (TTS) Generation** ✅
+    - OpenAI `tts-1` (voice: `alloy`) generates MP3 audio of the approved summary per language.
+    - Audio stored in Supabase Storage bucket `tts-audio`; cached in `audio_urls_json` JSONB column — lazy, per `comm_id + lang`.
+    - `GET /api/family/{fid}/member/{mid}/audio?lang=` returns `{url, sentences}`.
+    - Synchronized sentence highlighting: current sentence glows amber as audio plays, using proportional char-based timing from `audio.currentTime / audio.duration`.
 
 5. **Visual Aid Generation (Nano Banana)**
-   * Integrate an image generation model (e.g., Gemini 2.5 Flash Image) to generate supportive visual illustrations for the patient care plan.
-   * Store and serve these images alongside the summaries.
+    - Integrate an image generation model (e.g. Gemini 2.5 Flash Image, DALL-E 3) to produce a supportive illustration for the care plan.
+    - Store and serve images alongside summaries. Consider one image per summary (generated at approval time, not lazily) to avoid UX delay on the family viewer.
 
-6. **Audio Playback & Visuals in Family Viewer**
-   * Update the mobile-first Family Viewer page to include an audio player component for TTS playback.
-   * Add an image viewer component to display the generated visual aids.
+6. **Audio Playback & Visuals in Family Viewer** (audio ✅ / visuals pending)
+    - ✅ Audio: "▶ Listen / ⏸ Pause" button on `FamilyPage.tsx`; `<audio>` element auto-plays on URL load; view switches to sentence-highlight mode while playing; resets on language change.
+    - Pending: image viewer component (lightbox or inline) for the visual aid once Feature 5 is built.
 
-7. **Clinician Authentication (AuthGate)**
-   * Implement Supabase Auth on the frontend to gate clinician access.
-   * Add JWT verification middleware on the backend to secure clinician-only endpoints.
+7. **Clinician Authentication (AuthGate)** ✅
+   - Supabase magic-link (passwordless email) auth on the frontend.
+   - `AuthGate` component guards the `/clinician` route, redirecting unauthenticated users to `/login`.
+   - `verify_clinician_token` FastAPI dependency validates the Supabase JWT on all clinician-only endpoints (`/api/patient/*`, `/api/generate`, `/api/communications/*/approve`).
 
-8. **Delivery Stub**
-   * Implement a utility to generate QR codes and printable magic-link handouts directly from the clinician dashboard at the point of care.
+8. **Delivery Stub** ✅
+   - QR code on the clinician approval success card for point-of-care handoff.
+   - Print Handout on the clinician dashboard and Print Summary on the family viewer, both using a Blob-based print window with UTF-8 encoding for CJK support.
+   - A−/A+ font size controls on the family viewer; chosen size is preserved in the print output.
+
+9. **Audience-Specific Reports (Multi-Member Family Access)** ✅
+   - Expanded `target_audience` from `"patient" | "family"` to four specific recipient types: `"patient"`, `"spouse"`, `"child"`, `"caregiver"`.
+   - Each audience type has a distinct LLM prompt instruction block. Each approval produces a separately written summary with its own unique family member link.
+
+10. **Audit Trail** ✅
+    - Currently `approved_at` is the only audit field. A production deployment requires: which clinician approved (Supabase Auth `user_id`), which patient, and timestamps for each LLM generation call.
+    - Add `approved_by_user_id` (UUID FK to Supabase Auth `auth.users`) to `care_plan_translations`, populated from the verified JWT in the approve route.
+    - No changes to existing behaviour — purely additive columns.
+
+---
+
+## Known Test Gaps
+
+The following areas lack automated test coverage and carry regression risk:
+
+| Area | Gap | Risk |
+| --- | --- | --- |
+| `frontend/src/lib/markdown.ts` | No unit tests. Edge cases (nested bold/italic, mixed heading levels, empty input, `splitMarkdownSentences` with complex markdown) are untested. | Markdown and sentence-split regressions are invisible until a demo. |
+| Frontend integration (E2E) | No Playwright / Cypress tests. `ClinicianPage`, `FamilyPage`, and TTS playback flow are exercised only by manual testing. | A backend API contract change could silently break the UI. |
+| Auth edge cases | No tests for session expiry mid-workflow, double-tap Approve, or token refresh. | A clinician could lose work or trigger a duplicate approval if their session expires mid-flow. |
+| Translation glossary injection | The `_CLINICAL_GLOSSARY` entries in `llm.py` are present but not asserted to appear in the translation prompt string. | A refactor of `translate_summary` could silently drop the glossary without any test failing. |
+| Print window | No test for QR code SVG generation, print window DOM structure, or CJK font fallback stack. | Print regressions only surface at demo time on a real device. |
+| TTS sentence alignment | `splitMarkdownSentences` (frontend) and `split_sentences` (backend) are tested independently but not cross-validated against each other. If they diverge, the highlighted sentence index could be off by one or more during playback. | Misaligned highlighting is a demo-quality issue, not a functional bug. |

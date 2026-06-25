@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 from datetime import datetime, timezone
@@ -56,8 +57,26 @@ def init_db(db_url: str) -> None:
                     created_at TIMESTAMPTZ DEFAULT now(),
                     approved_at TIMESTAMPTZ,
                     conditions_json JSONB NOT NULL DEFAULT '[]',
-                    condition_diff JSONB
+                    condition_diff JSONB,
+                    translations_json JSONB DEFAULT '{}'
                 )
+            """)
+            # Idempotent migrations for columns added after initial schema.
+            cur.execute("""
+                ALTER TABLE care_plan_translations
+                ADD COLUMN IF NOT EXISTS translations_json JSONB DEFAULT '{}'
+            """)
+            cur.execute("""
+                ALTER TABLE care_plan_translations
+                ADD COLUMN IF NOT EXISTS approved_by_user_id UUID
+            """)
+            cur.execute("""
+                ALTER TABLE care_plan_translations
+                ADD COLUMN IF NOT EXISTS audio_urls_json JSONB DEFAULT '{}'
+            """)
+            cur.execute("""
+                ALTER TABLE care_plan_translations
+                ADD COLUMN IF NOT EXISTS image_url TEXT
             """)
 
             # One family group per patient — stable across approvals
@@ -79,6 +98,11 @@ def init_db(db_url: str) -> None:
                     created_at TIMESTAMPTZ DEFAULT now()
                 )
             """)
+
+            # Backend uses the anon key for CRUD — disable RLS so server-side
+            # writes are not blocked by missing policies on these tables.
+            cur.execute("ALTER TABLE families DISABLE ROW LEVEL SECURITY")
+            cur.execute("ALTER TABLE family_members DISABLE ROW LEVEL SECURITY")
     get_supabase()
 
 
@@ -142,10 +166,7 @@ def get_communication(comm_id: str) -> Optional[dict]:
     record["patient_name"] = patient.get("patient_name", "")
     record["epic_patient_id"] = patient.get("epic_patient_id", "")
 
-    # Supabase might return dict for JSONB, but code expects strings for json.loads
-    # For backward compatibility, we convert them back to strings if they are dicts/lists
-    import json
-
+    # Supabase returns JSONB columns as dicts/lists; callers that use json.loads expect strings.
     if isinstance(record.get("conditions_json"), (list, dict)):
         record["conditions_json"] = json.dumps(record["conditions_json"])
     if isinstance(record.get("condition_diff"), (list, dict)):
@@ -187,8 +208,6 @@ def get_latest_approved_communication(epic_patient_id: str) -> Optional[dict]:
     record["patient_name"] = patient.get("patient_name", "")
     record["epic_patient_id"] = patient.get("epic_patient_id", "")
 
-    import json
-
     if isinstance(record.get("conditions_json"), (list, dict)):
         record["conditions_json"] = json.dumps(record["conditions_json"])
     if isinstance(record.get("condition_diff"), (list, dict)):
@@ -200,16 +219,13 @@ def get_latest_approved_communication(epic_patient_id: str) -> Optional[dict]:
 def get_or_create_family(patient_id: str) -> str:
     """Return existing family_id for this patient, or create one."""
     supabase = get_supabase()
-    res = (
-        supabase.table("families")
-        .select("id")
-        .eq("patient_id", patient_id)
-        .execute()
-    )
+    res = supabase.table("families").select("id").eq("patient_id", patient_id).execute()
     if res.data:
         return res.data[0]["id"]
     family_id = str(uuid.uuid4())
-    supabase.table("families").insert({"id": family_id, "patient_id": patient_id}).execute()
+    supabase.table("families").insert(
+        {"id": family_id, "patient_id": patient_id}
+    ).execute()
     return family_id
 
 
@@ -226,12 +242,29 @@ def get_or_create_primary_member(family_id: str, name: str) -> str:
     if res.data:
         return res.data[0]["id"]
     member_id = str(uuid.uuid4())
-    supabase.table("family_members").insert({
-        "id": member_id,
-        "family_id": family_id,
-        "name": name,
-        "relationship": "patient",
-    }).execute()
+    supabase.table("family_members").insert(
+        {
+            "id": member_id,
+            "family_id": family_id,
+            "name": name,
+            "relationship": "patient",
+        }
+    ).execute()
+    return member_id
+
+
+def create_family_member(family_id: str, name: str, relationship: str) -> str:
+    """Insert a new family member row and return its id. Not idempotent — always inserts."""
+    supabase = get_supabase()
+    member_id = str(uuid.uuid4())
+    supabase.table("family_members").insert(
+        {
+            "id": member_id,
+            "family_id": family_id,
+            "name": name,
+            "relationship": relationship,
+        }
+    ).execute()
     return member_id
 
 
@@ -250,10 +283,7 @@ def get_family_summary(family_id: str, member_id: str) -> Optional[dict]:
         return None
 
     family_res = (
-        supabase.table("families")
-        .select("patient_id")
-        .eq("id", family_id)
-        .execute()
+        supabase.table("families").select("patient_id").eq("id", family_id).execute()
     )
     if not family_res.data:
         return None
@@ -277,6 +307,7 @@ def get_family_summary(family_id: str, member_id: str) -> Optional[dict]:
     record["epic_patient_id"] = patient.get("epic_patient_id", "")
 
     import json
+
     if isinstance(record.get("conditions_json"), (list, dict)):
         record["conditions_json"] = json.dumps(record["conditions_json"])
     if isinstance(record.get("condition_diff"), (list, dict)):
@@ -285,7 +316,138 @@ def get_family_summary(family_id: str, member_id: str) -> Optional[dict]:
     return record
 
 
-_UPDATABLE_FIELDS = {"ai_summary_text", "status", "approved_at", "target_audience"}
+def get_translation(comm_id: str, lang: str) -> Optional[str]:
+    """Return a cached translation for lang from translations_json, or None on cache miss."""
+    supabase = get_supabase()
+    res = (
+        supabase.table("care_plan_translations")
+        .select("translations_json")
+        .eq("id", comm_id)
+        .execute()
+    )
+    if not res.data:
+        return None
+    raw = res.data[0].get("translations_json") or {}
+    translations: dict = json.loads(raw) if isinstance(raw, str) else raw
+    return translations.get(lang)
+
+
+def set_translation(comm_id: str, lang: str, text: str) -> None:
+    """Write a translation into translations_json, preserving any other cached languages."""
+    supabase = get_supabase()
+    res = (
+        supabase.table("care_plan_translations")
+        .select("translations_json")
+        .eq("id", comm_id)
+        .execute()
+    )
+    if not res.data:
+        return
+    raw = res.data[0].get("translations_json") or {}
+    current: dict = json.loads(raw) if isinstance(raw, str) else raw
+    current[lang] = text
+    (
+        supabase.table("care_plan_translations")
+        .update({"translations_json": current})
+        .eq("id", comm_id)
+        .execute()
+    )
+
+
+def get_audio_url(comm_id: str, lang: str) -> Optional[str]:
+    """Return cached Supabase Storage public URL for this comm+lang, or None on miss."""
+    supabase = get_supabase()
+    res = (
+        supabase.table("care_plan_translations")
+        .select("audio_urls_json")
+        .eq("id", comm_id)
+        .execute()
+    )
+    if not res.data:
+        return None
+    raw = res.data[0].get("audio_urls_json") or {}
+    urls: dict = json.loads(raw) if isinstance(raw, str) else raw
+    return urls.get(lang)
+
+
+def set_audio_url(comm_id: str, lang: str, url: str) -> None:
+    """Cache a Supabase Storage public URL in audio_urls_json, preserving other languages."""
+    supabase = get_supabase()
+    res = (
+        supabase.table("care_plan_translations")
+        .select("audio_urls_json")
+        .eq("id", comm_id)
+        .execute()
+    )
+    if not res.data:
+        return
+    raw = res.data[0].get("audio_urls_json") or {}
+    current: dict = json.loads(raw) if isinstance(raw, str) else raw
+    current[lang] = url
+    (
+        supabase.table("care_plan_translations")
+        .update({"audio_urls_json": current})
+        .eq("id", comm_id)
+        .execute()
+    )
+
+
+def upload_audio(comm_id: str, lang: str, audio_bytes: bytes) -> str:
+    """Upload MP3 bytes to the tts-audio Supabase Storage bucket and return the public URL."""
+    supabase = get_supabase()
+    path = f"{comm_id}/{lang}.mp3"
+    supabase.storage.from_("tts-audio").upload(
+        path,
+        audio_bytes,
+        {"content-type": "audio/mpeg", "upsert": "true"},
+    )
+    return supabase.storage.from_("tts-audio").get_public_url(path)
+
+
+def get_image_url(comm_id: str) -> Optional[str]:
+    """Return the cached Supabase Storage public URL for the visual aid, or None on miss."""
+    supabase = get_supabase()
+    res = (
+        supabase.table("care_plan_translations")
+        .select("image_url")
+        .eq("id", comm_id)
+        .execute()
+    )
+    if not res.data:
+        return None
+    return res.data[0].get("image_url")
+
+
+def set_image_url(comm_id: str, url: str) -> None:
+    """Cache the visual aid public URL in the image_url column."""
+    supabase = get_supabase()
+    (
+        supabase.table("care_plan_translations")
+        .update({"image_url": url})
+        .eq("id", comm_id)
+        .execute()
+    )
+
+
+def upload_image(comm_id: str, image_bytes: bytes) -> str:
+    """Upload PNG bytes to the visual-aids Supabase Storage bucket and return the public URL."""
+    supabase = get_supabase()
+    path = f"{comm_id}/visual.png"
+    supabase.storage.from_("visual-aids").upload(
+        path,
+        image_bytes,
+        {"content-type": "image/png", "upsert": "true"},
+    )
+    return supabase.storage.from_("visual-aids").get_public_url(path)
+
+
+_UPDATABLE_FIELDS = {
+    "ai_summary_text",
+    "status",
+    "approved_at",
+    "target_audience",
+    "approved_by_user_id",
+}
 
 
 def update_communication(comm_id: str, **kwargs: str) -> bool:
