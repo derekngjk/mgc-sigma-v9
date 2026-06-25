@@ -686,12 +686,7 @@ The following core features are required to align the current proof-of-concept w
    - Expanded `target_audience` from `"patient" | "family"` to four specific recipient types: `"patient"`, `"spouse"`, `"child"`, `"caregiver"`.
    - Each audience type has a distinct LLM prompt instruction block. Each approval produces a separately written summary with its own unique family member link.
 
-10. **Patient Acknowledgment Tracking**
-    - Log a timestamped event when the family viewer is opened (first load of `GET /api/family/{fid}/member/{mid}`) and when the Print Summary button is used.
-    - A lightweight `access_log` table (`family_member_id`, `event` enum `opened|printed`, `lang`, `occurred_at`) is sufficient.
-    - Clinicians could then see "last opened by family: 3 hours ago" on a future dashboard without storing any PHI beyond the existing IDs.
-
-11. **Audit Trail**
+10. **Audit Trail** ✅
     - Currently `approved_at` is the only audit field. A production deployment requires: which clinician approved (Supabase Auth `user_id`), which patient, and timestamps for each LLM generation call.
     - Add `approved_by_user_id` (UUID FK to Supabase Auth `auth.users`) to `care_plan_translations`, populated from the verified JWT in the approve route.
     - No changes to existing behaviour — purely additive columns.
