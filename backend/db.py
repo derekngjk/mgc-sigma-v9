@@ -70,6 +70,10 @@ def init_db(db_url: str) -> None:
                 ALTER TABLE care_plan_translations
                 ADD COLUMN IF NOT EXISTS approved_by_user_id UUID
             """)
+            cur.execute("""
+                ALTER TABLE care_plan_translations
+                ADD COLUMN IF NOT EXISTS audio_urls_json JSONB DEFAULT '{}'
+            """)
 
             # One family group per patient — stable across approvals
             cur.execute("""
@@ -250,7 +254,12 @@ def create_family_member(family_id: str, name: str, relationship: str) -> str:
     supabase = get_supabase()
     member_id = str(uuid.uuid4())
     supabase.table("family_members").insert(
-        {"id": member_id, "family_id": family_id, "name": name, "relationship": relationship}
+        {
+            "id": member_id,
+            "family_id": family_id,
+            "name": name,
+            "relationship": relationship,
+        }
     ).execute()
     return member_id
 
@@ -341,7 +350,63 @@ def set_translation(comm_id: str, lang: str, text: str) -> None:
     )
 
 
-_UPDATABLE_FIELDS = {"ai_summary_text", "status", "approved_at", "target_audience", "approved_by_user_id"}
+def get_audio_url(comm_id: str, lang: str) -> Optional[str]:
+    """Return cached Supabase Storage public URL for this comm+lang, or None on miss."""
+    supabase = get_supabase()
+    res = (
+        supabase.table("care_plan_translations")
+        .select("audio_urls_json")
+        .eq("id", comm_id)
+        .execute()
+    )
+    if not res.data:
+        return None
+    raw = res.data[0].get("audio_urls_json") or {}
+    urls: dict = json.loads(raw) if isinstance(raw, str) else raw
+    return urls.get(lang)
+
+
+def set_audio_url(comm_id: str, lang: str, url: str) -> None:
+    """Cache a Supabase Storage public URL in audio_urls_json, preserving other languages."""
+    supabase = get_supabase()
+    res = (
+        supabase.table("care_plan_translations")
+        .select("audio_urls_json")
+        .eq("id", comm_id)
+        .execute()
+    )
+    if not res.data:
+        return
+    raw = res.data[0].get("audio_urls_json") or {}
+    current: dict = json.loads(raw) if isinstance(raw, str) else raw
+    current[lang] = url
+    (
+        supabase.table("care_plan_translations")
+        .update({"audio_urls_json": current})
+        .eq("id", comm_id)
+        .execute()
+    )
+
+
+def upload_audio(comm_id: str, lang: str, audio_bytes: bytes) -> str:
+    """Upload MP3 bytes to the tts-audio Supabase Storage bucket and return the public URL."""
+    supabase = get_supabase()
+    path = f"{comm_id}/{lang}.mp3"
+    supabase.storage.from_("tts-audio").upload(
+        path,
+        audio_bytes,
+        {"content-type": "audio/mpeg", "upsert": "true"},
+    )
+    return supabase.storage.from_("tts-audio").get_public_url(path)
+
+
+_UPDATABLE_FIELDS = {
+    "ai_summary_text",
+    "status",
+    "approved_at",
+    "target_audience",
+    "approved_by_user_id",
+}
 
 
 def update_communication(comm_id: str, **kwargs: str) -> bool:

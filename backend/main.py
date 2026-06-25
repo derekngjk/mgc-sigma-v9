@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from db import (
     create_communication,
     create_family_member,
+    get_audio_url,
     get_communication,
     get_family_summary,
     get_latest_approved_communication,
@@ -16,12 +17,21 @@ from db import (
     get_or_create_primary_member,
     get_translation,
     init_db,
+    set_audio_url,
     set_translation,
     update_communication,
+    upload_audio,
 )
 from fhir import FHIRError, PatientNotFoundError, fetch_patient_data
 from auth import verify_clinician_token
-from llm import LLMConfigError, LLMError, VALID_AUDIENCES, generate_summary, translate_summary
+from llm import (
+    LLMConfigError,
+    LLMError,
+    VALID_AUDIENCES,
+    generate_summary,
+    translate_summary,
+)
+from tts import generate_tts, split_sentences, strip_markdown
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -104,6 +114,11 @@ class FamilyViewResponse(BaseModel):
     condition_diff: ConditionDiff
 
 
+class AudioResponse(BaseModel):
+    url: str
+    sentences: list[str]
+
+
 _VALID_LANGS = {"en", "zh", "ms", "ta"}
 
 
@@ -175,7 +190,8 @@ def generate(
         )
     if req.target_audience not in VALID_AUDIENCES:
         raise HTTPException(
-            status_code=400, detail=f"target_audience must be one of: {sorted(VALID_AUDIENCES)}"
+            status_code=400,
+            detail=f"target_audience must be one of: {sorted(VALID_AUDIENCES)}",
         )
     record = get_communication(req.comm_id)
     if record is None:
@@ -272,7 +288,9 @@ def approve_communication(
     if audience == "patient":
         mid = get_or_create_primary_member(fid, updated.get("patient_name", ""))
     else:
-        mid = create_family_member(fid, _AUDIENCE_MEMBER_NAMES.get(audience, audience), audience)
+        mid = create_family_member(
+            fid, _AUDIENCE_MEMBER_NAMES.get(audience, audience), audience
+        )
 
     return ApproveResponse(
         id=comm_id,
@@ -323,3 +341,62 @@ def get_family_member_view(
         approved_at=record["approved_at"],
         condition_diff=ConditionDiff(**diff_raw),
     )
+
+
+@app.get(
+    "/api/family/{family_id}/member/{member_id}/audio", response_model=AudioResponse
+)
+def get_family_member_audio(
+    family_id: str,
+    member_id: str,
+    lang: str = Query(default="en"),
+) -> AudioResponse:
+    if lang not in _VALID_LANGS:
+        raise HTTPException(
+            status_code=400, detail=f"lang must be one of: {sorted(_VALID_LANGS)}"
+        )
+    record = get_family_summary(family_id, member_id)
+    if record is None:
+        raise HTTPException(
+            status_code=404, detail="Summary not found or not yet approved"
+        )
+    comm_id = record["id"]
+
+    # Resolve the text to convert (translate if needed, reusing the translation cache)
+    summary_text = record["ai_summary_text"]
+    if lang != "en":
+        cached_translation = get_translation(comm_id, lang)
+        if cached_translation is not None:
+            summary_text = cached_translation
+        else:
+            try:
+                summary_text = translate_summary(record["ai_summary_text"], lang)
+            except LLMConfigError as exc:
+                raise HTTPException(status_code=503, detail=str(exc))
+            except LLMError as exc:
+                raise HTTPException(status_code=502, detail=str(exc))
+            set_translation(comm_id, lang, summary_text)
+
+    clean_text = strip_markdown(summary_text)
+    sentences = split_sentences(clean_text)
+
+    # Return cached audio URL if available
+    cached_url = get_audio_url(comm_id, lang)
+    if cached_url:
+        return AudioResponse(url=cached_url, sentences=sentences)
+
+    # Generate, upload, and cache
+    try:
+        audio_bytes = generate_tts(clean_text)
+    except LLMConfigError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"TTS generation failed: {exc}")
+
+    try:
+        url = upload_audio(comm_id, lang, audio_bytes)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Audio upload failed: {exc}")
+
+    set_audio_url(comm_id, lang, url)
+    return AudioResponse(url=url, sentences=sentences)

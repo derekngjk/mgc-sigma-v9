@@ -15,7 +15,10 @@ def mock_db_init():
 @pytest.fixture(autouse=True, scope="session")
 def override_auth():
     """Bypass JWT verification for all tests."""
-    app.dependency_overrides[verify_clinician_token] = lambda: {"id": "test-user-id", "sub": "test-user"}
+    app.dependency_overrides[verify_clinician_token] = lambda: {
+        "id": "test-user-id",
+        "sub": "test-user",
+    }
     yield
     app.dependency_overrides.clear()
 

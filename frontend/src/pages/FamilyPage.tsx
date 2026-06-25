@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { markdownToHtml, openPrintWindow, PRINT_FONT } from '../lib/markdown';
+import { inlineToHtml, markdownToHtml, openPrintWindow, PRINT_FONT, splitMarkdownSentences } from '../lib/markdown';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -130,6 +130,13 @@ export default function FamilyPage() {
   const MIN_FONT = 14;
   const MAX_FONT = 26;
 
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [sentences, setSentences] = useState<string[]>([]);
+  const [currentSentenceIdx, setCurrentSentenceIdx] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
     if (!fid || !mid) {
       setPageState('not_found');
@@ -150,6 +157,14 @@ export default function FamilyPage() {
     if (newLang === lang || translating || !fid || !mid) return;
     setTranslating(true);
     setTranslateError(null);
+    // Reset audio — it's stale for a different language
+    setAudioUrl(null);
+    setSentences([]);
+    setCurrentSentenceIdx(0);
+    setIsPlaying(false);
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
     try {
       const res = await fetch(`${API_BASE}/api/family/${fid}/member/${mid}?lang=${newLang}`);
       if (!res.ok) {
@@ -165,6 +180,76 @@ export default function FamilyPage() {
       setTranslating(false);
     }
   }
+
+  async function handlePlay() {
+    if (!fid || !mid) return;
+    // Toggle play/pause if audio is already loaded
+    if (audioUrl && audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        audioRef.current.play();
+        setIsPlaying(true);
+      }
+      return;
+    }
+    setAudioLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/family/${fid}/member/${mid}/audio?lang=${lang}`);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(body.detail ?? `HTTP ${res.status}`);
+      }
+      const payload = (await res.json()) as { url: string; sentences: string[] };
+      setSentences(payload.sentences);
+      setCurrentSentenceIdx(0);
+      setAudioUrl(payload.url);
+    } catch {
+      // Audio errors are non-critical — silently ignore so the page stays usable
+    } finally {
+      setAudioLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!audioUrl || !audioRef.current) return;
+    const audio = audioRef.current;
+
+    // Pre-compute cumulative character offsets for proportional sentence timing
+    const charOffsets: number[] = [];
+    let total = 0;
+    for (const s of sentences) {
+      charOffsets.push(total);
+      total += s.length;
+    }
+
+    const onTimeUpdate = () => {
+      if (!audio.duration || total === 0) return;
+      const charPos = (audio.currentTime / audio.duration) * total;
+      let idx = 0;
+      for (let i = 0; i < charOffsets.length - 1; i++) {
+        if (charPos >= charOffsets[i]) idx = i;
+      }
+      setCurrentSentenceIdx(idx);
+    };
+    const onEnded = () => { setIsPlaying(false); setCurrentSentenceIdx(0); };
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('ended', onEnded);
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('pause', onPause);
+    audio.play();
+
+    return () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('pause', onPause);
+    };
+  }, [audioUrl]);
 
   if (pageState === 'loading') return <LoadingScreen />;
   if (pageState === 'not_found' || !data) return <NotFoundScreen />;
@@ -236,12 +321,80 @@ export default function FamilyPage() {
           </div>
         )}
 
-        {/* Summary */}
-        <div
-          className={`summary-body transition-opacity ${translating ? 'opacity-40' : 'opacity-100'}`}
-          style={{ fontSize: `${fontSize}px` }}
-          dangerouslySetInnerHTML={{ __html: markdownToHtml(summaryText) }}
-        />
+        {/* Listen button */}
+        <button
+          onClick={handlePlay}
+          disabled={audioLoading || translating}
+          className="mb-5 flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-4 py-1.5 text-sm font-medium text-teal-700 transition-colors hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {audioLoading ? (
+            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-teal-300 border-t-teal-600" />
+          ) : isPlaying ? (
+            '⏸ Pause'
+          ) : (
+            '▶ Listen'
+          )}
+        </button>
+
+        {/* Hidden audio element — controlled via audioRef */}
+        {audioUrl && <audio ref={audioRef} src={audioUrl} className="hidden" />}
+
+        {/* Summary — sentence-highlight view while playing, markdown view otherwise */}
+        {isPlaying || (audioUrl && !isPlaying && sentences.length > 0) ? (
+          <div className="summary-body" style={{ fontSize: `${fontSize}px`, lineHeight: 1.85 }}>
+            {splitMarkdownSentences(summaryText).map((s, i) => {
+              const highlighted = i === currentSentenceIdx;
+              const hl = highlighted ? 'rounded bg-amber-100 px-0.5' : '';
+
+              // Heading line
+              const hMatch = s.match(/^(#{1,3})\s+(.+)$/);
+              if (hMatch) {
+                const weight =
+                  hMatch[1].length === 1
+                    ? 'text-xl font-bold mt-4 mb-1'
+                    : hMatch[1].length === 2
+                      ? 'text-lg font-semibold mt-3 mb-1'
+                      : 'text-base font-semibold mt-2 mb-0.5';
+                return (
+                  <div
+                    key={i}
+                    className={`block text-slate-900 transition-colors duration-150 ${weight} ${hl}`}
+                    dangerouslySetInnerHTML={{ __html: inlineToHtml(hMatch[2]) }}
+                  />
+                );
+              }
+
+              // List item
+              const lMatch = s.match(/^[-*+]\s+(.+)$/);
+              if (lMatch) {
+                return (
+                  <div
+                    key={i}
+                    className={`my-0.5 flex gap-2 transition-colors duration-150 ${hl}`}
+                  >
+                    <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-slate-400" />
+                    <span dangerouslySetInnerHTML={{ __html: inlineToHtml(lMatch[1]) }} />
+                  </div>
+                );
+              }
+
+              // Regular sentence — inline so consecutive sentences flow as a paragraph
+              return (
+                <span
+                  key={i}
+                  className={`transition-colors duration-150 ${hl} ${highlighted ? 'text-slate-900' : 'text-slate-600'}`}
+                  dangerouslySetInnerHTML={{ __html: inlineToHtml(s) + ' ' }}
+                />
+              );
+            })}
+          </div>
+        ) : (
+          <div
+            className={`summary-body transition-opacity ${translating ? 'opacity-40' : 'opacity-100'}`}
+            style={{ fontSize: `${fontSize}px` }}
+            dangerouslySetInnerHTML={{ __html: markdownToHtml(summaryText) }}
+          />
+        )}
 
         {/* Condition changes */}
         <ChangesSection diff={data.condition_diff} />

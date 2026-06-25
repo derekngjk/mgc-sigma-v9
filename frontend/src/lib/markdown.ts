@@ -1,7 +1,19 @@
-function inlineToHtml(text: string): string {
+export function inlineToHtml(text: string): string {
   return text
     .replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/gs, '<em>$1</em>');
+}
+
+/** Split text into sentences while preserving markdown — mirrors backend split_sentences(). */
+export function splitMarkdownSentences(text: string): string[] {
+  const result: string[] = [];
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const parts = trimmed.split(/(?<=[.!?])\s+/);
+    result.push(...parts.filter((p) => p.trim()));
+  }
+  return result;
 }
 
 export function markdownToHtml(text: string): string {
