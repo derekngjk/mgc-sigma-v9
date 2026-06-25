@@ -21,6 +21,7 @@ interface FamilyViewData {
   ai_summary_text: string;
   approved_at: string;
   condition_diff: ConditionDiff;
+  image_url?: string | null;
 }
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -112,6 +113,18 @@ function ChangesSection({ diff }: { diff: ConditionDiff }) {
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+function IllustrationSection({ url }: { url: string }) {
+  return (
+    <div className="mb-6 overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
+      <img
+        src={url}
+        alt="Supportive illustration for your care summary"
+        className="w-full object-cover"
+      />
     </div>
   );
 }
@@ -398,6 +411,9 @@ export default function FamilyPage() {
 
         {/* Condition changes */}
         <ChangesSection diff={data.condition_diff} />
+
+        {/* Visual aid illustration */}
+        {data.image_url && <IllustrationSection url={data.image_url} />}
 
         {/* Print */}
         <div className="mt-8 flex justify-center">

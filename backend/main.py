@@ -12,15 +12,18 @@ from db import (
     get_audio_url,
     get_communication,
     get_family_summary,
+    get_image_url,
     get_latest_approved_communication,
     get_or_create_family,
     get_or_create_primary_member,
     get_translation,
     init_db,
     set_audio_url,
+    set_image_url,
     set_translation,
     update_communication,
     upload_audio,
+    upload_image,
 )
 from fhir import FHIRError, PatientNotFoundError, fetch_patient_data
 from auth import verify_clinician_token
@@ -32,6 +35,7 @@ from llm import (
     translate_summary,
 )
 from tts import generate_tts, split_sentences, strip_markdown
+from image import ImageConfigError, ImageError, generate_visual
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -98,6 +102,7 @@ class GenerateResponse(BaseModel):
 
 class ApproveRequest(BaseModel):
     ai_summary_text: str
+    generate_image: bool = False
 
 
 class ApproveResponse(BaseModel):
@@ -112,6 +117,7 @@ class FamilyViewResponse(BaseModel):
     ai_summary_text: str
     approved_at: str
     condition_diff: ConditionDiff
+    image_url: str | None = None
 
 
 class AudioResponse(BaseModel):
@@ -120,6 +126,20 @@ class AudioResponse(BaseModel):
 
 
 _VALID_LANGS = {"en", "zh", "ms", "ta"}
+
+
+def _generate_and_cache_image(comm_id: str, conditions: list[str], summary_text: str = "") -> None:
+    """Background task: generate visual aid and cache URL. Failures are silent."""
+    print(f"[image] starting generation for {comm_id}, conditions={conditions}")
+    try:
+        image_bytes = generate_visual(conditions, summary_text)
+        url = upload_image(comm_id, image_bytes)
+        set_image_url(comm_id, url)
+        print(f"[image] done for {comm_id}: {url}")
+    except (ImageConfigError, ImageError) as exc:
+        print(f"[image] generation failed for {comm_id}: {exc}")
+    except Exception as exc:
+        print(f"[image] unexpected error for {comm_id}: {exc}")
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -257,6 +277,7 @@ def get_family_view(
         ai_summary_text=summary_text,
         approved_at=record["approved_at"],
         condition_diff=ConditionDiff(**diff_raw),
+        image_url=get_image_url(comm_id),
     )
 
 
@@ -291,6 +312,11 @@ def approve_communication(
         mid = create_family_member(
             fid, _AUDIENCE_MEMBER_NAMES.get(audience, audience), audience
         )
+
+    if req.generate_image:
+        conditions = json.loads(updated.get("conditions_json") or "[]")
+        summary_text = updated.get("ai_summary_text") or ""
+        _generate_and_cache_image(comm_id, conditions, summary_text)
 
     return ApproveResponse(
         id=comm_id,
@@ -340,6 +366,7 @@ def get_family_member_view(
         ai_summary_text=summary_text,
         approved_at=record["approved_at"],
         condition_diff=ConditionDiff(**diff_raw),
+        image_url=get_image_url(record["id"]),
     )
 
 

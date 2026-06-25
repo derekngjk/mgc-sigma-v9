@@ -74,6 +74,10 @@ def init_db(db_url: str) -> None:
                 ALTER TABLE care_plan_translations
                 ADD COLUMN IF NOT EXISTS audio_urls_json JSONB DEFAULT '{}'
             """)
+            cur.execute("""
+                ALTER TABLE care_plan_translations
+                ADD COLUMN IF NOT EXISTS image_url TEXT
+            """)
 
             # One family group per patient — stable across approvals
             cur.execute("""
@@ -398,6 +402,43 @@ def upload_audio(comm_id: str, lang: str, audio_bytes: bytes) -> str:
         {"content-type": "audio/mpeg", "upsert": "true"},
     )
     return supabase.storage.from_("tts-audio").get_public_url(path)
+
+
+def get_image_url(comm_id: str) -> Optional[str]:
+    """Return the cached Supabase Storage public URL for the visual aid, or None on miss."""
+    supabase = get_supabase()
+    res = (
+        supabase.table("care_plan_translations")
+        .select("image_url")
+        .eq("id", comm_id)
+        .execute()
+    )
+    if not res.data:
+        return None
+    return res.data[0].get("image_url")
+
+
+def set_image_url(comm_id: str, url: str) -> None:
+    """Cache the visual aid public URL in the image_url column."""
+    supabase = get_supabase()
+    (
+        supabase.table("care_plan_translations")
+        .update({"image_url": url})
+        .eq("id", comm_id)
+        .execute()
+    )
+
+
+def upload_image(comm_id: str, image_bytes: bytes) -> str:
+    """Upload PNG bytes to the visual-aids Supabase Storage bucket and return the public URL."""
+    supabase = get_supabase()
+    path = f"{comm_id}/visual.png"
+    supabase.storage.from_("visual-aids").upload(
+        path,
+        image_bytes,
+        {"content-type": "image/png", "upsert": "true"},
+    )
+    return supabase.storage.from_("visual-aids").get_public_url(path)
 
 
 _UPDATABLE_FIELDS = {

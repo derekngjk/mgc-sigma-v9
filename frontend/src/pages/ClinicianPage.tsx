@@ -8,7 +8,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
-type Stage = 'idle' | 'fetching' | 'ready' | 'generating' | 'generated' | 'approved';
+type Stage = 'idle' | 'fetching' | 'ready' | 'generating' | 'generated' | 'approving' | 'approved';
 
 interface ConditionDiff {
   added: string[];
@@ -165,11 +165,13 @@ interface AiDraftPanelProps {
   fetchError: string | null;
   generateError: string | null;
   commId: string;
+  generateImage: boolean;
   onAudienceChange: (v: string) => void;
   onLengthChange: (v: ReportLength) => void;
   onDraftChange: (v: string) => void;
   onGenerate: () => void;
   onApprove: () => void;
+  onGenerateImageChange: (v: boolean) => void;
 }
 
 function AiDraftPanel({
@@ -180,14 +182,17 @@ function AiDraftPanel({
   fetchError,
   generateError,
   commId,
+  generateImage,
   onAudienceChange,
   onLengthChange,
   onDraftChange,
   onGenerate,
   onApprove,
+  onGenerateImageChange,
 }: AiDraftPanelProps) {
   const canGenerate = stage === 'ready' || stage === 'generated';
   const isGenerating = stage === 'generating';
+  const isApproving = stage === 'approving';
   const canApprove = stage === 'generated' && draftText.trim().length > 0;
 
   return (
@@ -264,7 +269,7 @@ function AiDraftPanel({
         <textarea
           value={draftText}
           onChange={(e) => onDraftChange(e.target.value)}
-          disabled={stage !== 'generated'}
+          disabled={stage !== 'generated' || isApproving}
           placeholder={
             stage === 'ready'
               ? 'Click "Generate Summary" to create an AI draft…'
@@ -283,13 +288,46 @@ function AiDraftPanel({
           </p>
         )}
 
+        {/* Visual aid toggle */}
+        <div className={`mt-3 flex items-center justify-between rounded-lg border px-3 py-2.5 transition-colors ${
+          generateImage ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'
+        } ${!canApprove ? 'opacity-50' : ''}`}>
+          <div>
+            <p className="text-sm font-medium text-slate-700">Visual aid illustration</p>
+            <p className="text-xs text-slate-400">Generated via Nano Banana</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={generateImage}
+            onClick={() => canApprove && onGenerateImageChange(!generateImage)}
+            disabled={!canApprove}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed ${
+              generateImage ? 'bg-emerald-500' : 'bg-slate-300'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                generateImage ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
         {/* Approve */}
         <button
           onClick={onApprove}
-          disabled={!canApprove}
-          className="mt-4 w-full rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+          disabled={!canApprove || isApproving}
+          className="mt-3 w-full rounded-md bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
         >
-          ✓ Approve &amp; Generate Link
+          {isApproving ? (
+            <span className="flex items-center justify-center gap-2">
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+              {generateImage ? 'Generating image…' : 'Approving…'}
+            </span>
+          ) : (
+            '✓ Approve & Generate Link'
+          )}
         </button>
       </div>
     </div>
@@ -311,6 +349,7 @@ export default function ClinicianPage({ session }: { session: Session }) {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [approvedLink, setApprovedLink] = useState('');
+  const [generateImage, setGenerateImage] = useState(false);
 
   async function handleFetch() {
     setStage('fetching');
@@ -364,11 +403,12 @@ export default function ClinicianPage({ session }: { session: Session }) {
 
   async function handleApprove() {
     setApproveError(null);
+    setStage('approving');
     try {
       const res = await fetch(`${API_BASE}/api/communications/${commId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader },
-        body: JSON.stringify({ ai_summary_text: draftText }),
+        body: JSON.stringify({ ai_summary_text: draftText, generate_image: generateImage }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { detail?: string };
@@ -379,6 +419,7 @@ export default function ClinicianPage({ session }: { session: Session }) {
       setStage('approved');
     } catch (e) {
       setApproveError(e instanceof Error ? e.message : 'Unknown error');
+      setStage('generated');
     }
   }
 
@@ -555,6 +596,7 @@ ${bodyHtml}
                   setApproveError(null);
                   setFetchError(null);
                   setGenerateError(null);
+                  setGenerateImage(false);
                 }}
                 className="text-sm text-emerald-700 underline hover:text-emerald-900"
               >
@@ -577,11 +619,13 @@ ${bodyHtml}
             fetchError={null}
             generateError={generateError ?? approveError}
             commId={commId}
+            generateImage={generateImage}
             onAudienceChange={setAudience}
             onLengthChange={setLength}
             onDraftChange={setDraftText}
             onGenerate={handleGenerate}
             onApprove={handleApprove}
+            onGenerateImageChange={setGenerateImage}
           />
         </div>
       )}

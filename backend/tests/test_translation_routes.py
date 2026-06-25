@@ -37,6 +37,7 @@ def client() -> TestClient:
 @pytest.fixture(autouse=True)
 def stub_get_family_summary(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_main, "get_family_summary", lambda fid, mid: APPROVED_RECORD)
+    monkeypatch.setattr(_main, "get_image_url", lambda cid: None)
 
 
 def test_family_member_default_lang_returns_english(client: TestClient) -> None:
