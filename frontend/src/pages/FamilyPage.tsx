@@ -421,6 +421,9 @@ export default function FamilyPage() {
             onClick={() => {
               const activeLangLabel = LANG_OPTIONS.find((l) => l.code === lang)?.label ?? lang.toUpperCase();
               const bodyHtml = markdownToHtml(summaryText);
+              const imageHtml = data.image_url
+                ? `<div class="illustration"><img src="${data.image_url}" alt="Visual aid illustration"/></div>`
+                : '';
               openPrintWindow(`<!doctype html><html><head>
 <meta charset="utf-8"/>
 <title>Care Summary — ${data.patient_name}</title>
@@ -438,6 +441,8 @@ export default function FamilyPage() {
   em{font-style:italic}
   ul{margin:0 0 .875rem;padding-left:1.25rem}
   li{margin-bottom:.25rem;color:#334155}
+  .illustration{margin:1.5rem 0;text-align:center}
+  .illustration img{max-width:100%;border-radius:.5rem;border:1px solid #e2e8f0}
   .footer{margin-top:2rem;font-size:.75rem;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:.75rem}
 </style>
 </head><body>
@@ -445,6 +450,7 @@ export default function FamilyPage() {
 <p class="meta">${data.patient_name} &mdash; Last updated ${formatDate(data.approved_at)}</p>
 <hr class="divider"/>
 ${bodyHtml}
+${imageHtml}
 <div class="footer">Reviewed and approved by your care team. Synthetic data only.</div>
 </body></html>`);
             }}
