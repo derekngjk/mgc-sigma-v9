@@ -4,6 +4,13 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from dotenv import find_dotenv, load_dotenv
+
+# Load .env before reading config below, so the live endpoint + API key are
+# populated regardless of import order (mirrors llm.py). Without this, main.py
+# imports fhir before llm loads .env, freezing the placeholder defaults — and
+# every live fetch then 502s (wrong tenant URL, missing x-api-key).
+load_dotenv(find_dotenv())
 
 # Synapxe HealthX Innovation Sandbox (HX-IS) — FHIR R4B endpoint.
 # The tenant ID is embedded in the URL path; obtain both the URL and the API
