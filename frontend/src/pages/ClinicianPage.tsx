@@ -29,26 +29,29 @@ interface PatientData {
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
+// Live IDs are fetched from the Synapxe HealthX FHIR R4B endpoint and must be
+// provisioned first via `backend/seed_healthx.py`. The Mock ID is served from
+// the local backend/mock_data fixture (offline fallback).
 const PATIENTS = [
+  {
+    id: '1d604da9-9a81-4ba9-80c2-de3375d59b40',
+    label: 'Aaron Koh — Chronic sinusitis (Live)',
+  },
+  {
+    id: '034e9e3b-2def-4559-bb2a-7850888ae060',
+    label: 'Aaron Lim — Acute bronchitis, resolved (Live)',
+  },
+  {
+    id: '10339b10-3cd1-4ac3-ac13-ec26728cb592',
+    label: 'Aaron Teo — Sinusitis, bronchitis, foot laceration (Live)',
+  },
+  {
+    id: 'hx-oncology-001',
+    label: 'Tan Mei Ling — Breast cancer, stage III (Live)',
+  },
   {
     id: 'mock-oncology-123',
     label: 'Tan Mei Ling — Breast cancer, stage III (Mock)',
-  },
-  {
-    id: 'mock-cardiology-456',
-    label: 'Lim Chong Wei — Heart failure, T2DM, hypertension (Mock)',
-  },
-  {
-    id: 'mock-pediatric-789',
-    label: 'Chen Mei Xin — Paediatric ALL, neutropenia (Mock)',
-  },
-  {
-    id: 'mock-neurology-101',
-    label: 'Priya d/o Krishnan — Relapsing-remitting MS (Mock)',
-  },
-  {
-    id: 'mock-geriatric-202',
-    label: "Goh Swee Huat — Alzheimer's, AFib, osteoporosis (Mock)",
   },
 ];
 
