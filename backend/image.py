@@ -117,13 +117,13 @@ def _generate_via_openai(prompt: str) -> bytes:
 def generate_visual(conditions: list[str], summary_text: str = "") -> bytes:
     """Generate a supportive illustration, dispatching on IMAGE_PROVIDER.
 
-    Default provider is 'gemini' (Nano Banana primary, Imagen 4 fallback).
-    Set IMAGE_PROVIDER=openai to use gpt-image-2 at medium quality instead.
+    Default provider is 'openai' (gpt-image-2 at medium quality).
+    Set IMAGE_PROVIDER=gemini for Nano Banana primary, Imagen 4 fallback.
     Returns PNG bytes.
     Raises ImageConfigError on missing keys / unknown provider.
     Raises ImageError on API failure.
     """
-    provider = os.environ.get("IMAGE_PROVIDER", "gemini").lower()
+    provider = os.environ.get("IMAGE_PROVIDER", "openai").lower()
     logger.info(
         "generate_visual: provider=%s, %d conditions", provider, len(conditions)
     )

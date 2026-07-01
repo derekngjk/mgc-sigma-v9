@@ -35,7 +35,7 @@ def test_generate_visual_gemini_calls_nano_banana_primary(monkeypatch):
     fake_client.interactions.create.return_value = fake_interaction
 
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
-    monkeypatch.delenv("IMAGE_PROVIDER", raising=False)
+    monkeypatch.setenv("IMAGE_PROVIDER", "gemini")
 
     with patch("google.genai.Client", return_value=fake_client):
         result = generate_visual(
@@ -61,7 +61,7 @@ def test_generate_visual_gemini_falls_back_to_imagen(monkeypatch):
     fake_client.models.generate_images.return_value.generated_images = [fake_image]
 
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
-    monkeypatch.delenv("IMAGE_PROVIDER", raising=False)
+    monkeypatch.setenv("IMAGE_PROVIDER", "gemini")
 
     with patch("google.genai.Client", return_value=fake_client):
         result = generate_visual(["breast cancer"])
@@ -73,14 +73,14 @@ def test_generate_visual_gemini_falls_back_to_imagen(monkeypatch):
 
 def test_generate_visual_missing_gemini_key_raises(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("IMAGE_PROVIDER", raising=False)
+    monkeypatch.setenv("IMAGE_PROVIDER", "gemini")
     with pytest.raises(ImageConfigError, match="GEMINI_API_KEY not set"):
         generate_visual(["some condition"])
 
 
 def test_generate_visual_both_gemini_apis_fail_raises(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
-    monkeypatch.delenv("IMAGE_PROVIDER", raising=False)
+    monkeypatch.setenv("IMAGE_PROVIDER", "gemini")
 
     fake_client = MagicMock()
     fake_client.interactions.create.side_effect = RuntimeError("nano banana down")
