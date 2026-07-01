@@ -5,16 +5,17 @@ from typing import Any
 
 import httpx
 
-# Synapxe HealthX Innovation Sandbox (HX-IS) — NGEMR FHIR R4 endpoint.
-# Requires HX-IS registration at https://innovation.healthx.sg/ to obtain the
-# sandbox URL and bearer token. Set both env vars once credentials are issued.
+# Synapxe HealthX Innovation Sandbox (HX-IS) — FHIR R4B endpoint.
+# The tenant ID is embedded in the URL path; obtain both the URL and the API
+# key from your HX-IS API Portal application (https://innovation.healthx.sg/).
 FHIR_BASE_URL: str = os.getenv(
     "FHIR_BASE_URL",
-    "https://sandbox.healthx.gov.sg/api/FHIR/R4/",
+    "https://api.healthx.sg/fhir/r4b/your-tenant-id",
 )
-# OAuth2 bearer token issued by the HealthX developer portal. Leave empty to
-# make unauthenticated requests (only works against the mock fallback path).
-FHIR_ACCESS_TOKEN: str = os.getenv("FHIR_ACCESS_TOKEN", "")
+# Per-tenant API key issued by the HealthX API Portal, sent as the `x-api-key`
+# header. Leave empty to make unauthenticated requests (only the mock fallback
+# path works without a key).
+HEALTHX_API_KEY: str = os.getenv("HEALTHX_API_KEY", "")
 MOCK_DATA_DIR: Path = Path(__file__).parent / "mock_data"
 
 
@@ -76,12 +77,12 @@ def load_mock_patient(patient_id: str = "mock-oncology-123") -> dict[str, Any]:
 
 
 def _fetch_from_sandbox(patient_id: str) -> dict[str, Any]:
-    """Make three synchronous FHIR R4 calls against the Synapxe HealthX sandbox."""
+    """Make three synchronous FHIR R4B calls against the Synapxe HealthX sandbox."""
     base = FHIR_BASE_URL.rstrip("/")
     timeout = 10.0
     headers: dict[str, str] = {}
-    if FHIR_ACCESS_TOKEN:
-        headers["Authorization"] = f"Bearer {FHIR_ACCESS_TOKEN}"
+    if HEALTHX_API_KEY:
+        headers["x-api-key"] = HEALTHX_API_KEY
     try:
         with httpx.Client(timeout=timeout, headers=headers) as client:
             patient_resp = client.get(f"{base}/Patient/{patient_id}")
