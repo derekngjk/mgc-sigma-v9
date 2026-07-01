@@ -12,24 +12,31 @@ class ImageError(Exception):
 
 
 def _make_image_prompt(conditions: list[str], summary_text: str = "") -> str:
-    """Build a specific, labeled educational diagram prompt from conditions and summary."""
+    """Build a warm, layperson-friendly illustration prompt (a reassuring scene, not a clinical diagram)."""
     primary = conditions[0] if conditions else "the patient's medical condition"
-    all_conds = " and ".join(conditions[:3]) if conditions else "the patient's medical condition"
+    all_conds = ", ".join(conditions[:3]) if conditions else "the patient's medical condition"
 
-    # Strip markdown and take the first ~200 chars as context for the image model
+    # Strip markdown and take the first ~240 chars as context for the image model
     context_snippet = ""
     if summary_text:
         clean = re.sub(r"[#*_`>\-]", "", summary_text).strip()
-        clean = " ".join(clean.split())[:200]
-        context_snippet = f' Context from the patient summary: "{clean}..."'
+        clean = " ".join(clean.split())[:240]
+        context_snippet = (
+            f' The picture should echo the caring, reassuring message of this patient summary: "{clean}".'
+        )
 
     return (
-        f"An informative, labeled medical illustration for a patient education document about {all_conds}.{context_snippet} "
-        f"Style: clean educational diagram with a soft, reassuring colour palette (pale blues, warm ambers, sage greens). "
-        f"Include clear text labels and callout lines identifying the key anatomical structures or treatment concepts "
-        f"relevant to {primary}. Labels should name the specific condition, affected body area, or treatment step. "
-        "Layout: professional medical infographic — approachable and clear, not graphic or alarming. "
-        "Light background. Suitable for a hospital patient information leaflet."
+        f"A warm, friendly illustration to help a patient and their family feel calm and supported "
+        f"while coping with {all_conds}.{context_snippet} "
+        "Show a gentle, hopeful everyday scene — for example a person resting comfortably at home, "
+        "drinking water, taking their medicine, going for a light walk, or being comforted by a caring "
+        "family member or nurse — that conveys reassurance and simple self-care rather than clinical detail. "
+        "Style: soft, rounded, modern flat illustration like a friendly health app or wellness brochure, "
+        "with a calm, reassuring colour palette (pale blues, warm ambers, sage greens) and a light background. "
+        "Keep it simple, human and uplifting. Do NOT draw anatomy, organs, medical diagrams, charts, needles, "
+        "blood, surgery, or anything frightening. Avoid any text, letters, numbers, or words in the image, "
+        "as text tends to render incorrectly. "
+        f"The goal is emotional reassurance and comfort for someone living with {primary}."
     )
 
 
