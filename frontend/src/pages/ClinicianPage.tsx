@@ -39,6 +39,10 @@ const PATIENT_GROUPS = [
     label: 'Live — HealthX endpoint',
     patients: [
       {
+        id: 'hx-endocrine-001',
+        label: 'Nurul Aisyah — Thyroid storm + diabetic ketoacidosis',
+      },
+      {
         id: 'hx-oncology-001',
         label: 'Tan Mei Ling — Breast cancer, stage III',
       },
@@ -59,6 +63,10 @@ const PATIENT_GROUPS = [
   {
     label: 'Mock — offline fallback',
     patients: [
+      {
+        id: 'mock-endocrine-123',
+        label: 'Nurul Aisyah — Thyroid storm + diabetic ketoacidosis',
+      },
       {
         id: 'mock-oncology-123',
         label: 'Tan Mei Ling — Breast cancer, stage III',

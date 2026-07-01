@@ -2,13 +2,16 @@
 
 from typing import Any
 
+import pytest
+
 import seed_healthx as seed
 
 
-def test_load_oncology_bundle_rehosts_under_live_id() -> None:
-    bundle = seed._load_oncology_bundle()
+@pytest.mark.parametrize("source, live_id, _label", seed.MOCK_LIVE_PATIENTS)
+def test_rehost_mock_bundle_rewrites_ids_and_refs(source, live_id, _label) -> None:
+    bundle = seed._rehost_mock_bundle(source, live_id)
 
-    assert bundle["patient"]["id"] == seed.ONCOLOGY_LIVE_ID
+    assert bundle["patient"]["id"] == live_id
 
     resources = [
         e["resource"]
@@ -16,17 +19,18 @@ def test_load_oncology_bundle_rehosts_under_live_id() -> None:
         for e in bundle[key]["entry"]
     ]
     assert resources, "expected at least one condition/careplan"
-    ref = f"Patient/{seed.ONCOLOGY_LIVE_ID}"
+    ref = f"Patient/{live_id}"
     assert all(r["subject"]["reference"] == ref for r in resources)
     ids = [r["id"] for r in resources]
     assert len(ids) == len(set(ids))  # ids are unique
-    assert all(rid.startswith(seed.ONCOLOGY_LIVE_ID) for rid in ids)
+    assert all(rid.startswith(live_id) for rid in ids)
 
 
-def test_oncology_careplan_activities_have_status() -> None:
+@pytest.mark.parametrize("source, live_id, _label", seed.MOCK_LIVE_PATIENTS)
+def test_rehost_careplan_activities_have_status(source, live_id, _label) -> None:
     # FHIR R4B requires CarePlan.activity.detail.status (1..1); the mock omits it,
     # so the re-host must inject it or the Firely server rejects it with a 422.
-    bundle = seed._load_oncology_bundle()
+    bundle = seed._rehost_mock_bundle(source, live_id)
     for entry in bundle["care_plans"]["entry"]:
         for activity in entry["resource"].get("activity", []):
             detail = activity.get("detail")

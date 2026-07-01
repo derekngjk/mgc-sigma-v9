@@ -36,14 +36,21 @@ REQUEST_DELAY_S = 0.35
 MAX_RETRIES = 5
 
 MOCK_DATA_DIR: Path = Path(__file__).parent / "mock_data"
-ONCOLOGY_SOURCE: Path = MOCK_DATA_DIR / "mock-oncology-123.json"
 ONCOLOGY_LIVE_ID: str = "hx-oncology-001"
+ENDOCRINE_LIVE_ID: str = "hx-endocrine-001"
+
+# Mock fixtures re-hosted under a live-only id so they are fetched from the
+# endpoint (not the local mock fallback): (source fixture, live id, label).
+MOCK_LIVE_PATIENTS: list[tuple[Path, str, str]] = [
+    (MOCK_DATA_DIR / "mock-endocrine-123.json", ENDOCRINE_LIVE_ID, "Nurul Aisyah — DKA + thyroid storm"),
+    (MOCK_DATA_DIR / "mock-oncology-123.json", ONCOLOGY_LIVE_ID, "Tan Mei Ling — Breast cancer, stage III"),
+]
 
 # (patient_id, display label) for everything this script provisions — handy for
 # wiring the frontend selector and for docs.
 LIVE_PATIENTS: list[tuple[str, str]] = [
     *[(pid, name) for pid, name in PATIENT_ALLOWLIST.items()],
-    (ONCOLOGY_LIVE_ID, "Tan Mei Ling — Breast cancer, stage III"),
+    *[(live_id, label) for _, live_id, label in MOCK_LIVE_PATIENTS],
 ]
 
 
@@ -67,20 +74,20 @@ def _normalise_careplan_activity(care_plan: dict[str, Any]) -> None:
             detail.setdefault("status", "in-progress")
 
 
-def _load_oncology_bundle() -> dict[str, Any]:
-    """Re-host the oncology mock under ONCOLOGY_LIVE_ID (new ids + subject refs)."""
-    raw = json.loads(ONCOLOGY_SOURCE.read_text(encoding="utf-8"))
+def _rehost_mock_bundle(source: Path, live_id: str) -> dict[str, Any]:
+    """Re-host a mock fixture under a live-only id (new ids + subject refs)."""
+    raw = json.loads(source.read_text(encoding="utf-8"))
     patient = copy.deepcopy(raw["patient"])
-    patient["id"] = ONCOLOGY_LIVE_ID
+    patient["id"] = live_id
     display = (patient.get("name") or [{}])[0].get("text", "")
 
     def _rehost(entries: list[dict[str, Any]], suffix: str) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         for i, entry in enumerate(entries):
             resource = copy.deepcopy(entry["resource"])
-            resource["id"] = f"{ONCOLOGY_LIVE_ID}-{suffix}-{i}"
+            resource["id"] = f"{live_id}-{suffix}-{i}"
             resource["subject"] = {
-                "reference": f"Patient/{ONCOLOGY_LIVE_ID}",
+                "reference": f"Patient/{live_id}",
                 "display": display,
             }
             if resource.get("resourceType") == "CarePlan":
@@ -117,7 +124,10 @@ def _iter_resources(bundles: dict[str, dict[str, Any]]) -> Iterator[tuple[str, s
 
 
 def _collect_bundles() -> dict[str, dict[str, Any]]:
-    return {**build_all_bundles(), ONCOLOGY_LIVE_ID: _load_oncology_bundle()}
+    bundles = dict(build_all_bundles())
+    for source, live_id, _ in MOCK_LIVE_PATIENTS:
+        bundles[live_id] = _rehost_mock_bundle(source, live_id)
+    return bundles
 
 
 def main(argv: list[str]) -> int:

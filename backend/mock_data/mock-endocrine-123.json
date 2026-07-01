@@ -1,0 +1,341 @@
+{
+  "patient": {
+    "resourceType": "Patient",
+    "id": "mock-endocrine-123",
+    "identifier": [
+      {
+        "use": "official",
+        "type": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+              "code": "NRIC",
+              "display": "National Registration Identity Card"
+            }
+          ]
+        },
+        "system": "https://www.moh.gov.sg/NRIC",
+        "value": "S9512345D"
+      }
+    ],
+    "name": [
+      {
+        "use": "official",
+        "text": "Nurul Aisyah binte Rahman",
+        "family": "Rahman",
+        "given": ["Nurul Aisyah"]
+      }
+    ],
+    "birthDate": "1995-03-14",
+    "gender": "female",
+    "managingOrganization": {
+      "reference": "Organization/SGH-ENDO",
+      "display": "Singapore General Hospital — Department of Endocrinology"
+    }
+  },
+  "conditions": {
+    "resourceType": "Bundle",
+    "type": "searchset",
+    "entry": [
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "subject": { "reference": "Patient/mock-endocrine-123", "display": "Nurul Aisyah binte Rahman" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
+          "code": {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "190262002",
+                "display": "Thyroid storm (thyrotoxic crisis)"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "E05.01",
+                "display": "Thyrotoxicosis with diffuse goitre with thyroid storm"
+              }
+            ],
+            "text": "Thyroid storm (thyrotoxic crisis)"
+          },
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
+          "note": [
+            { "text": "Burch-Wartofsky score 55 (highly suggestive of thyroid storm). Precipitated by an intercurrent urinary tract infection. Febrile to 39.4°C, agitated, new atrial fibrillation with rapid ventricular response." }
+          ]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "subject": { "reference": "Patient/mock-endocrine-123", "display": "Nurul Aisyah binte Rahman" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
+          "code": {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "420422005",
+                "display": "Diabetic ketoacidosis"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "E10.10",
+                "display": "Type 1 diabetes mellitus with ketoacidosis without coma"
+              }
+            ],
+            "text": "Diabetic ketoacidosis"
+          },
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
+          "note": [
+            { "text": "Venous pH 7.18, bicarbonate 12 mmol/L, blood ketones 5.8 mmol/L, glucose 24 mmol/L, anion gap 24. Same infective precipitant; compounded by relative insulin deficiency during acute illness." }
+          ]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "subject": { "reference": "Patient/mock-endocrine-123", "display": "Nurul Aisyah binte Rahman" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
+          "code": {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "353295004",
+                "display": "Graves' disease"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "E05.00",
+                "display": "Thyrotoxicosis with diffuse goitre without thyroid storm"
+              }
+            ],
+            "text": "Graves' disease (autoimmune hyperthyroidism)"
+          },
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
+          "note": [
+            { "text": "Diagnosed 2023. TSH receptor antibody (TRAb) positive, diffuse goitre with audible bruit, mild thyroid eye disease. Underlying cause of the current thyroid storm." }
+          ]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "subject": { "reference": "Patient/mock-endocrine-123", "display": "Nurul Aisyah binte Rahman" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "active",
+                "display": "Active"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
+          "code": {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "46635009",
+                "display": "Type 1 diabetes mellitus"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "E10.9",
+                "display": "Type 1 diabetes mellitus without complications"
+              }
+            ],
+            "text": "Type 1 diabetes mellitus"
+          },
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
+          "note": [
+            { "text": "Diagnosed age 14 (2009). Basal-bolus insulin (insulin glargine + insulin aspart). Most recent HbA1c 9.2% — suboptimal control. Co-existing Graves' disease reflects autoimmune polyglandular syndrome type 3." }
+          ]
+        }
+      },
+      {
+        "resource": {
+          "resourceType": "Condition",
+          "subject": { "reference": "Patient/mock-endocrine-123", "display": "Nurul Aisyah binte Rahman" },
+          "clinicalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                "code": "resolved",
+                "display": "Resolved"
+              }
+            ]
+          },
+          "verificationStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                "code": "confirmed",
+                "display": "Confirmed"
+              }
+            ]
+          },
+          "code": {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "34713006",
+                "display": "Vitamin D deficiency"
+              },
+              {
+                "system": "http://hl7.org/fhir/sid/icd-10",
+                "code": "E55.9",
+                "display": "Vitamin D deficiency, unspecified"
+              }
+            ],
+            "text": "Vitamin D deficiency"
+          },
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                  "code": "problem-list-item",
+                  "display": "Problem List Item"
+                }
+              ]
+            }
+          ],
+          "note": [
+            { "text": "25-OH vitamin D 18 ng/mL in 2024; repleted with cholecalciferol and now normal. Retained as a regression check that resolved conditions are filtered from the active problem list." }
+          ]
+        }
+      }
+    ]
+  },
+  "care_plans": {
+    "resourceType": "Bundle",
+    "type": "searchset",
+    "entry": [
+      {
+        "resource": {
+          "resourceType": "CarePlan",
+          "subject": { "reference": "Patient/mock-endocrine-123", "display": "Nurul Aisyah binte Rahman" },
+          "status": "active",
+          "intent": "plan",
+          "title": "Dual Endocrine Emergency Stabilisation Plan",
+          "description": "Concurrent inpatient management of thyroid storm and diabetic ketoacidosis in the high-dependency unit, co-led by Endocrinology and Intensive Care, while treating the shared infective precipitant.",
+          "author": {
+            "reference": "Organization/SGH-ENDO",
+            "display": "Singapore General Hospital — Department of Endocrinology"
+          },
+          "activity": [
+            { "detail": { "status": "in-progress", "description": "DKA — fixed-rate IV insulin infusion at 0.1 units/kg/hr with hourly capillary glucose and blood ketone monitoring; continue long-acting basal insulin throughout." } },
+            { "detail": { "status": "in-progress", "description": "DKA — IV 0.9% sodium chloride resuscitation with potassium replacement guided by 1–2 hourly potassium; add dextrose once glucose < 14 mmol/L; monitor for cerebral oedema." } },
+            { "detail": { "status": "in-progress", "description": "Thyroid storm — propylthiouracil (PTU) 200 mg every 4 hours to block thyroid hormone synthesis and peripheral T4→T3 conversion." } },
+            { "detail": { "status": "in-progress", "description": "Thyroid storm — Lugol's iodine given at least 1 hour AFTER PTU to inhibit hormone release (order matters to avoid the Jod-Basedow effect)." } },
+            { "detail": { "status": "in-progress", "description": "Thyroid storm — IV propranolol (or esmolol) for adrenergic symptom control and rate control of atrial fibrillation." } },
+            { "detail": { "status": "in-progress", "description": "Thyroid storm — IV hydrocortisone 100 mg every 8 hours for adrenal support and to further reduce T4→T3 conversion." } },
+            { "detail": { "status": "in-progress", "description": "Precipitant — empirical antibiotics for the underlying urinary tract infection; paracetamol and active cooling for pyrexia (avoid aspirin, which displaces thyroid hormone from binding proteins)." } }
+          ],
+          "goal": [
+            { "display": "Resolve ketoacidosis: close the anion gap, clear blood ketones to < 0.6 mmol/L, and transition to a subcutaneous basal-bolus insulin regimen." },
+            { "display": "Control the thyrotoxic crisis: normalise heart rate and temperature and achieve a biochemically euthyroid state." },
+            { "display": "Plan definitive Graves' disease therapy (radioactive iodine, long-term antithyroid drugs, or thyroidectomy) once the patient is stable." }
+          ]
+        }
+      }
+    ]
+  }
+}
