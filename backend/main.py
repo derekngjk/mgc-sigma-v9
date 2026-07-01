@@ -1,8 +1,14 @@
 import json
+import logging
 import os
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 

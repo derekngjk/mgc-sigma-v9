@@ -493,6 +493,48 @@ Approved English summaries can now be read in Singapore's four official language
 
 ---
 
+## Feature 5 — Visual Aid Generation
+
+**Files:** `backend/image.py`, `backend/db.py`, `backend/main.py`, `backend/tests/test_image.py`, `backend/.env.example`
+
+### What was built
+
+Approving a summary can optionally generate a labeled medical illustration that is stored alongside the summary and rendered on the family viewer. Provider selection is driven by the backend `IMAGE_PROVIDER` env var (default `gemini`, alternative `openai`) — the frontend is unaware of which model produced the image. Under `gemini` the code first tries **Nano Banana** (`gemini-3.1-flash-image`) via the `google-genai` `interactions` API and falls back to **Imagen 4** (`imagen-4.0-generate-001`) if that call fails. Under `openai` it calls `gpt-image-2` at `quality="medium"`, size `1024x1024`. Either path returns raw PNG bytes; `upload_image` writes them to Supabase Storage bucket `visual-aids`; `set_image_url` caches the public URL on `care_plan_translations.image_url`.
+
+### Provider decision
+
+**Nano Banana (`gemini-3.1-flash-image`) as the primary Gemini model:** Nano Banana went GA in early 2026 and produces higher-quality labeled diagrams than Imagen 4 for the medical-education prompt style used here (rich label callouts, soft palette, infographic layout). It is also cheaper and lower-latency per call. Imagen 4 remains available as a fallback inside `_generate_via_gemini` — if the `interactions` call raises (quota, transient 5xx, model deprecation), the same client re-issues the request via `client.models.generate_images` before returning an error. The dual-path adds resilience at zero extra cost when the primary succeeds.
+
+**OpenAI `gpt-image-2` as the alternate provider:** The provider dispatcher exists to unblock two situations without frontend churn — A/B testing image quality across vendors, and environments where the Gemini API is blocked (regulatory boundaries, corporate proxies). `quality="medium"` was chosen because `low` produced illegible labels and `high` roughly doubled cost with no visible improvement on the educational-diagram prompt.
+
+**Nano Banana model ID must be the production one, not `-preview`:** The `gemini-3.1-flash-image-preview` alias was shut down on 2026-06-25 and now returns 404. The constant `GEMINI_PRIMARY_MODEL` in `image.py` is pinned to the production ID `gemini-3.1-flash-image` — any future model rev happens in that one constant.
+
+**`gpt-image-2` does not accept `response_format`:** Unlike the legacy `dall-e-*` models, the newer `gpt-image-*` family always returns `b64_json` and rejects the `response_format` parameter with `Unknown parameter: 'response_format'`. The call site passes only `model`, `prompt`, `quality`, and `size`; the response is decoded via `base64.b64decode(response.data[0].b64_json)`.
+
+### `IMAGE_PROVIDER` env var design
+
+**Env var read inside `generate_visual`, not at import time:** The provider dispatcher reads `os.environ.get("IMAGE_PROVIDER")` on each call rather than as a module-level constant. This makes provider switching cheap in tests (`monkeypatch.setenv("IMAGE_PROVIDER", "openai")` before the call, no import reload needed) and lets a hosted deployment toggle providers without a process restart if the surrounding infra reloads env from a secret manager.
+
+**Reuses `GEMINI_API_KEY` and `OPENAI_API_KEY` from the LLM block:** No new secrets. The same account/key already used for `LLM_PROVIDER` powers the image path. This means enabling image generation with the currently-selected LLM provider requires zero config changes if the corresponding key is already set.
+
+**Unknown provider raises `ImageConfigError` with a listing of valid values:** Silent fallback to `gemini` on unknown values was rejected because it masks a typo (`IMAGE_PROVIDER=gimini` should fail loudly, not silently pick the default). The exception message explicitly lists the valid values.
+
+### Logging decision
+
+**Module-level `logging.getLogger(__name__)` in `image.py`, `logging.basicConfig` in `main.py`:** The backend previously used ad-hoc `print()` statements in `main.py`'s image wrapper. `image.py` had no logging at all — when the fallback ran or a provider misbehaved, there was no signal. Introduced the stdlib `logging` module: INFO for provider selection and per-model success, WARNING for the Gemini primary → Imagen fallback transition, ERROR before raising, DEBUG for the full prompt text and returned byte size. `logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))` is set at the top of `main.py` — uvicorn's default log config only configures its own loggers, so without `basicConfig` the module logger's output is discarded silently. `LOG_LEVEL=DEBUG` in `.env` surfaces the prompt content when tuning generation behaviour.
+
+### Storage decision
+
+**Supabase Storage bucket `visual-aids` (public read), service role key required for upload:** Mirrors the `tts-audio` pattern exactly. Images are PNG blobs stored under `{comm_id}/visual.png`, marked public so the family viewer can `<img src="...">` without an auth header. Upload requires the service role key — the anon key is rejected by the default RLS on `storage.objects` with `new row violates row-level security policy`. This is the same constraint documented in the TTS section: `SUPABASE_KEY` must be the `sb_secret_...` service role key when the backend uploads to Storage.
+
+### Testing decisions
+
+**11 tests covering both providers and both error surfaces:** `test_generate_visual_gemini_calls_nano_banana_primary` asserts the primary path uses `client.interactions.create` with `model="gemini-3.1-flash-image"` and that Imagen is not called. `test_generate_visual_gemini_falls_back_to_imagen` forces the Nano Banana call to raise and asserts Imagen is invoked. `test_generate_visual_openai_provider_calls_gpt_image_2` mocks `openai.OpenAI` and asserts the correct model/quality/size. Missing-key and unknown-provider paths each have a dedicated test. Route-level tests (`test_approve_calls_image_generation_when_flag_true` / `_false`) verify the approve endpoint dispatches to `_generate_and_cache_image` when the `generate_image` flag is set.
+
+**Provider constants read inside the function, not at module load, for test simplicity:** Because `IMAGE_PROVIDER` is fetched per-call, tests use `monkeypatch.setenv` and never need `importlib.reload(image)`. Model ID assertions in tests reference the same constants (`GEMINI_PRIMARY_MODEL`, `OPENAI_IMAGE_MODEL`) that the code uses, so a rev to a newer model updates one place and cascades naturally.
+
+---
+
 ## Feature 8 — Delivery Stub (QR Code + Print Handout)
 
 **Files:** `frontend/src/pages/ClinicianPage.tsx`, `frontend/src/pages/FamilyPage.tsx`, `frontend/src/lib/markdown.ts`, `frontend/src/index.css`
@@ -728,13 +770,16 @@ The following core features are required to align the current proof-of-concept w
     - `GET /api/family/{fid}/member/{mid}/audio?lang=` returns `{url, sentences}`.
     - Synchronized sentence highlighting: current sentence glows amber as audio plays, using proportional char-based timing from `audio.currentTime / audio.duration`.
 
-5. **Visual Aid Generation (Nano Banana)**
-    - Integrate an image generation model (e.g. Gemini 2.5 Flash Image, DALL-E 3) to produce a supportive illustration for the care plan.
-    - Store and serve images alongside summaries. Consider one image per summary (generated at approval time, not lazily) to avoid UX delay on the family viewer.
+5. **Visual Aid Generation (Nano Banana)** ✅
+    - `IMAGE_PROVIDER` env var (`gemini` default, `openai` alternative) selects the backend model — frontend is unaware.
+    - Under `gemini`: Nano Banana (`gemini-3.1-flash-image`) primary via `google-genai` interactions API, Imagen 4 (`imagen-4.0-generate-001`) fallback on failure.
+    - Under `openai`: `gpt-image-2` at `quality="medium"`, `size="1024x1024"`.
+    - PNG bytes stored in Supabase Storage bucket `visual-aids` (public read, service-role upload); public URL cached on `care_plan_translations.image_url`.
+    - Generation is opt-in per approval via the `generate_image` flag on `POST /api/communications/{id}/approve`; runs synchronously in-request today (background-task extraction is a straightforward future win if latency becomes an issue).
 
-6. **Audio Playback & Visuals in Family Viewer** (audio ✅ / visuals pending)
-    - ✅ Audio: "▶ Listen / ⏸ Pause" button on `FamilyPage.tsx`; `<audio>` element auto-plays on URL load; view switches to sentence-highlight mode while playing; resets on language change.
-    - Pending: image viewer component (lightbox or inline) for the visual aid once Feature 5 is built.
+6. **Audio Playback & Visuals in Family Viewer** ✅
+    - Audio: "▶ Listen / ⏸ Pause" button on `FamilyPage.tsx`; `<audio>` element auto-plays on URL load; view switches to sentence-highlight mode while playing; resets on language change.
+    - Visuals: cached `image_url` from `care_plan_translations` is rendered inline in the family viewer and included in the printed handout.
 
 7. **Clinician Authentication (AuthGate)** ✅
    - Supabase magic-link (passwordless email) auth on the frontend.
