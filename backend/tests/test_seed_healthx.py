@@ -23,6 +23,17 @@ def test_load_oncology_bundle_rehosts_under_live_id() -> None:
     assert all(rid.startswith(seed.ONCOLOGY_LIVE_ID) for rid in ids)
 
 
+def test_oncology_careplan_activities_have_status() -> None:
+    # FHIR R4B requires CarePlan.activity.detail.status (1..1); the mock omits it,
+    # so the re-host must inject it or the Firely server rejects it with a 422.
+    bundle = seed._load_oncology_bundle()
+    for entry in bundle["care_plans"]["entry"]:
+        for activity in entry["resource"].get("activity", []):
+            detail = activity.get("detail")
+            if isinstance(detail, dict):
+                assert detail.get("status"), "activity.detail.status must be set"
+
+
 def test_iter_resources_puts_patients_before_children() -> None:
     bundles: dict[str, dict[str, Any]] = {
         "p1": {

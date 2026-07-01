@@ -19,15 +19,21 @@ Usage:
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Iterator
 
 import httpx
 
 from synthea_to_fhir import PATIENT_ALLOWLIST, build_all_bundles
+
+# The HX-IS API gateway rate-limits; throttle requests and back off on 429.
+REQUEST_DELAY_S = 0.35
+MAX_RETRIES = 5
 
 MOCK_DATA_DIR: Path = Path(__file__).parent / "mock_data"
 ONCOLOGY_SOURCE: Path = MOCK_DATA_DIR / "mock-oncology-123.json"
@@ -53,22 +59,32 @@ def _load_dotenv(path: Path) -> None:
         os.environ.setdefault(key.strip(), val.strip())
 
 
+def _normalise_careplan_activity(care_plan: dict[str, Any]) -> None:
+    """Inject the R4B-required CarePlan.activity.detail.status (1..1), absent in the mock."""
+    for activity in care_plan.get("activity", []):
+        detail = activity.get("detail")
+        if isinstance(detail, dict):
+            detail.setdefault("status", "in-progress")
+
+
 def _load_oncology_bundle() -> dict[str, Any]:
     """Re-host the oncology mock under ONCOLOGY_LIVE_ID (new ids + subject refs)."""
     raw = json.loads(ONCOLOGY_SOURCE.read_text(encoding="utf-8"))
-    patient = dict(raw["patient"])
+    patient = copy.deepcopy(raw["patient"])
     patient["id"] = ONCOLOGY_LIVE_ID
     display = (patient.get("name") or [{}])[0].get("text", "")
 
     def _rehost(entries: list[dict[str, Any]], suffix: str) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         for i, entry in enumerate(entries):
-            resource = dict(entry["resource"])
+            resource = copy.deepcopy(entry["resource"])
             resource["id"] = f"{ONCOLOGY_LIVE_ID}-{suffix}-{i}"
             resource["subject"] = {
                 "reference": f"Patient/{ONCOLOGY_LIVE_ID}",
                 "display": display,
             }
+            if resource.get("resourceType") == "CarePlan":
+                _normalise_careplan_activity(resource)
             out.append({"resource": resource})
         return out
 
@@ -128,16 +144,28 @@ def main(argv: list[str]) -> int:
     ok = 0
     with httpx.Client(timeout=30.0, headers=headers) as client:
         for rtype, rid, resource in resources:
-            resp = client.put(f"{base}/{rtype}/{rid}", content=json.dumps(resource))
+            resp = _put_with_retry(client, f"{base}/{rtype}/{rid}", resource)
             if resp.status_code in (200, 201):
                 ok += 1
                 print(f"[ok]   PUT {rtype}/{rid} -> {resp.status_code}")
             else:
                 print(f"[FAIL] PUT {rtype}/{rid} -> {resp.status_code}")
                 print(f"       {resp.text[:300]}")
+            time.sleep(REQUEST_DELAY_S)
 
     print(f"\n{ok}/{len(resources)} resources provisioned")
     return 0 if ok == len(resources) else 2
+
+
+def _put_with_retry(client: httpx.Client, url: str, resource: dict[str, Any]) -> httpx.Response:
+    """PUT a resource, retrying on 429 with exponential backoff (1,2,4,8,16s)."""
+    resp = client.put(url, content=json.dumps(resource))
+    for attempt in range(MAX_RETRIES):
+        if resp.status_code != 429:
+            return resp
+        time.sleep(2**attempt)
+        resp = client.put(url, content=json.dumps(resource))
+    return resp
 
 
 if __name__ == "__main__":
