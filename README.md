@@ -148,7 +148,7 @@ Open <http://localhost:5173>.
 
 ```bash
 cd backend
-uv run pytest -v          # 24 tests, all mocked — no live DB or LLM needed
+uv run pytest -v          # full suite, all mocked — no live DB or LLM needed
 uv run ruff check .       # lint
 uv run ruff format .      # format
 ```
