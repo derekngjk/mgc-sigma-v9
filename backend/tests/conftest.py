@@ -1,8 +1,10 @@
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
-from main import app
+
 from app.dependencies import verify_clinician_token
+from app.main import app
 
 
 @pytest.fixture(autouse=True, scope="session")

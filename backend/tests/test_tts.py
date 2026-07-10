@@ -3,9 +3,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-import main as _main
+from app.main import app
+from app.routers import family
 from app.services.llm import LLMConfigError
-from main import app
 from app.services.tts import split_sentences, strip_markdown
 
 ENGLISH_TEXT = "Cancer treatment is underway. The care team is here for you."
@@ -98,10 +98,10 @@ def test_generate_tts_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_generate_tts_missing_key_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    import app.services.tts as _tts
-
     # Restore real generate_tts to test the key check
     import importlib
+
+    import app.services.tts as _tts
 
     importlib.reload(_tts)
     from app.services.tts import generate_tts as real_generate_tts
@@ -121,7 +121,7 @@ def client() -> TestClient:
 
 @pytest.fixture(autouse=True)
 def stub_family_summary(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(_main, "get_family_summary", lambda fid, mid: APPROVED_RECORD)
+    monkeypatch.setattr(family, "get_family_summary", lambda fid, mid: APPROVED_RECORD)
 
 
 def test_audio_endpoint_invalid_lang(client: TestClient) -> None:
@@ -132,7 +132,7 @@ def test_audio_endpoint_invalid_lang(client: TestClient) -> None:
 def test_audio_endpoint_invalid_fid_mid(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(_main, "get_family_summary", lambda fid, mid: None)
+    monkeypatch.setattr(family, "get_family_summary", lambda fid, mid: None)
     resp = client.get("/api/family/bad-fid/member/bad-mid/audio?lang=en")
     assert resp.status_code == 404
 
@@ -140,10 +140,10 @@ def test_audio_endpoint_invalid_fid_mid(
 def test_audio_endpoint_cache_hit_skips_generation(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(_main, "get_audio_url", lambda comm_id, lang: AUDIO_URL)
+    monkeypatch.setattr(family, "get_audio_url", lambda comm_id, lang: AUDIO_URL)
     generate_called: list[bool] = []
     monkeypatch.setattr(
-        _main, "generate_tts", lambda text: generate_called.append(True) or b""
+        family, "generate_tts", lambda text: generate_called.append(True) or b""
     )
 
     resp = client.get("/api/family/fid-1/member/mid-1/audio?lang=en")
@@ -158,12 +158,12 @@ def test_audio_endpoint_cache_hit_skips_generation(
 def test_audio_endpoint_cache_miss_generates_and_caches(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(_main, "get_audio_url", lambda comm_id, lang: None)
-    monkeypatch.setattr(_main, "generate_tts", lambda text: FAKE_MP3)
-    monkeypatch.setattr(_main, "upload_audio", lambda comm_id, lang, data: AUDIO_URL)
+    monkeypatch.setattr(family, "get_audio_url", lambda comm_id, lang: None)
+    monkeypatch.setattr(family, "generate_tts", lambda text: FAKE_MP3)
+    monkeypatch.setattr(family, "upload_audio", lambda comm_id, lang, data: AUDIO_URL)
     set_calls: list[tuple] = []
     monkeypatch.setattr(
-        _main, "set_audio_url", lambda c, lg, u: set_calls.append((c, lg, u))
+        family, "set_audio_url", lambda c, lg, u: set_calls.append((c, lg, u))
     )
 
     resp = client.get("/api/family/fid-1/member/mid-1/audio?lang=en")

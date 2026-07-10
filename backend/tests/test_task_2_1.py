@@ -5,8 +5,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import db
+from app.main import app
 from app.services.fhir import PatientNotFoundError
-from main import app
 
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 

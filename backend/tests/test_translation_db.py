@@ -2,9 +2,7 @@
 
 from unittest.mock import MagicMock
 
-
 from app import db
-
 
 # ── get_translation ───────────────────────────────────────────────────────────
 

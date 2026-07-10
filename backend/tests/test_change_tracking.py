@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import db
-from main import app
+from app.main import app
 
 
 @pytest.fixture
@@ -52,9 +52,11 @@ def test_get_latest_approved_returns_approved_record(mock_supabase) -> None:
 def test_first_fetch_all_conditions_are_ongoing(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, mock_supabase
 ) -> None:
-    import main
+    from app.routers import clinician
 
-    monkeypatch.setattr(main, "fetch_patient_data", lambda _: _make_mock_fhir(["C1"]))
+    monkeypatch.setattr(
+        clinician, "fetch_patient_data", lambda _: _make_mock_fhir(["C1"])
+    )
 
     # 1. get_latest_approved_communication -> find patient
     mock_supabase.table("patients").execute.side_effect = [

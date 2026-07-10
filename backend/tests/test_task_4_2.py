@@ -1,10 +1,12 @@
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 from fastapi.testclient import TestClient
+
 from app import db
-import main
-from main import app
 from app.dependencies import verify_clinician_token
+from app.main import app
+from app.routers import clinician
 
 APPROVED_TEXT = "Think of the cancer cells like weeds taking over a garden."
 
@@ -96,7 +98,10 @@ def test_approve_stores_clinician_id(
         ),
     ]
 
-    patched = mocker.patch("main.update_communication", wraps=main.update_communication)
+    patched = mocker.patch(
+        "app.routers.clinician.update_communication",
+        wraps=clinician.update_communication,
+    )
     resp = client.post(
         f"/api/communications/{seeded_comm_id}/approve",
         json={"ai_summary_text": APPROVED_TEXT},

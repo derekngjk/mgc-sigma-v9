@@ -1,8 +1,10 @@
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 from fastapi.testclient import TestClient
+
 from app import db
-from main import app
+from app.main import app
 
 MOCK_SUMMARY = "Think of the cancer cells like weeds taking over a garden..."
 
