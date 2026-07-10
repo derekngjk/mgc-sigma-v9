@@ -12,7 +12,7 @@ logging.basicConfig(
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from db import (
+from app.db import (
     create_communication,
     create_family_member,
     get_audio_url,

@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
-import db
+from app import db
 import main
 from main import app
 from auth import verify_clinician_token

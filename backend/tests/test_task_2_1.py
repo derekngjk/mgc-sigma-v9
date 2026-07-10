@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-import db
+from app import db
 from fhir import PatientNotFoundError
 from main import app
 
