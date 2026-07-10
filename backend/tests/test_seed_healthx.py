@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-import seed_healthx as seed
+from scripts import seed_healthx as seed
 
 
 @pytest.mark.parametrize("source, live_id, _label", seed.MOCK_LIVE_PATIENTS)
@@ -42,8 +42,12 @@ def test_iter_resources_puts_patients_before_children() -> None:
     bundles: dict[str, dict[str, Any]] = {
         "p1": {
             "patient": {"resourceType": "Patient", "id": "p1"},
-            "conditions": {"entry": [{"resource": {"resourceType": "Condition", "id": "c1"}}]},
-            "care_plans": {"entry": [{"resource": {"resourceType": "CarePlan", "id": "cp1"}}]},
+            "conditions": {
+                "entry": [{"resource": {"resourceType": "Condition", "id": "c1"}}]
+            },
+            "care_plans": {
+                "entry": [{"resource": {"resourceType": "CarePlan", "id": "cp1"}}]
+            },
         }
     }
     ordered = list(seed._iter_resources(bundles))

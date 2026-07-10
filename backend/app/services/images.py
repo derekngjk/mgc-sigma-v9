@@ -1,7 +1,10 @@
+"""Educational visual-aid generation, dispatching on IMAGE_PROVIDER."""
+
 import base64
 import logging
-import os
 import re
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +33,6 @@ def _make_image_prompt(conditions: list[str], summary_text: str = "") -> str:
         else "the patient's medical condition"
     )
 
-    # Strip markdown and take the first ~200 chars as context for the image model
     context_snippet = ""
     if summary_text:
         clean = re.sub(r"[#*_`>\-]", "", summary_text).strip()
@@ -49,14 +51,13 @@ def _make_image_prompt(conditions: list[str], summary_text: str = "") -> str:
 
 def _generate_via_gemini(prompt: str) -> bytes:
     """Nano Banana (gemini-3.1-flash-image) primary; Imagen 4 fallback."""
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
+    if not settings.gemini_api_key:
         raise ImageConfigError("GEMINI_API_KEY not set")
 
     from google import genai
     from google.genai import types
 
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(api_key=settings.gemini_api_key)
 
     try:
         interaction = client.interactions.create(
@@ -92,13 +93,12 @@ def _generate_via_gemini(prompt: str) -> bytes:
 
 def _generate_via_openai(prompt: str) -> bytes:
     """OpenAI gpt-image-2 at medium quality, 1024x1024, returned as PNG bytes."""
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
+    if not settings.openai_api_key:
         raise ImageConfigError("OPENAI_API_KEY not set")
 
     from openai import OpenAI
 
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=settings.openai_api_key)
 
     try:
         response = client.images.generate(
@@ -115,15 +115,11 @@ def _generate_via_openai(prompt: str) -> bytes:
 
 
 def generate_visual(conditions: list[str], summary_text: str = "") -> bytes:
-    """Generate a supportive illustration, dispatching on IMAGE_PROVIDER.
+    """Generate a supportive illustration as PNG bytes, dispatching on IMAGE_PROVIDER.
 
-    Default provider is 'openai' (gpt-image-2 at medium quality).
-    Set IMAGE_PROVIDER=gemini for Nano Banana primary, Imagen 4 fallback.
-    Returns PNG bytes.
-    Raises ImageConfigError on missing keys / unknown provider.
-    Raises ImageError on API failure.
+    Raises ImageConfigError on missing keys / unknown provider, ImageError on API failure.
     """
-    provider = os.environ.get("IMAGE_PROVIDER", "openai").lower()
+    provider = settings.image_provider.lower()
     logger.info(
         "generate_visual: provider=%s, %d conditions", provider, len(conditions)
     )

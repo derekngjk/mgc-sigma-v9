@@ -13,8 +13,8 @@ Resources are PUT in dependency order (Patients, then Conditions, then CarePlans
 so subject references resolve. Config is read from backend/.env.
 
 Usage:
-    uv run python seed_healthx.py            # provision against the live tenant
-    uv run python seed_healthx.py --dry-run  # list resources, make no network calls
+    uv run python -m scripts.seed_healthx            # provision against the live tenant
+    uv run python -m scripts.seed_healthx --dry-run  # list resources, make no network calls
 """
 
 from __future__ import annotations
@@ -24,26 +24,35 @@ import json
 import os
 import sys
 import time
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import httpx
 
-from synthea_to_fhir import PATIENT_ALLOWLIST, build_all_bundles
+from app.config import MOCK_DATA_DIR
+from scripts.synthea_to_fhir import PATIENT_ALLOWLIST, build_all_bundles
 
 # The HX-IS API gateway rate-limits; throttle requests and back off on 429.
 REQUEST_DELAY_S = 0.35
 MAX_RETRIES = 5
 
-MOCK_DATA_DIR: Path = Path(__file__).parent / "mock_data"
 ONCOLOGY_LIVE_ID: str = "hx-oncology-001"
 ENDOCRINE_LIVE_ID: str = "hx-endocrine-001"
 
 # Mock fixtures re-hosted under a live-only id so they are fetched from the
 # endpoint (not the local mock fallback): (source fixture, live id, label).
 MOCK_LIVE_PATIENTS: list[tuple[Path, str, str]] = [
-    (MOCK_DATA_DIR / "mock-endocrine-123.json", ENDOCRINE_LIVE_ID, "Nurul Aisyah — DKA + thyroid storm"),
-    (MOCK_DATA_DIR / "mock-oncology-123.json", ONCOLOGY_LIVE_ID, "Tan Mei Ling — Breast cancer, stage III"),
+    (
+        MOCK_DATA_DIR / "mock-endocrine-123.json",
+        ENDOCRINE_LIVE_ID,
+        "Nurul Aisyah — DKA + thyroid storm",
+    ),
+    (
+        MOCK_DATA_DIR / "mock-oncology-123.json",
+        ONCOLOGY_LIVE_ID,
+        "Tan Mei Ling — Breast cancer, stage III",
+    ),
 ]
 
 # (patient_id, display label) for everything this script provisions — handy for
@@ -52,18 +61,6 @@ LIVE_PATIENTS: list[tuple[str, str]] = [
     *[(pid, name) for pid, name in PATIENT_ALLOWLIST.items()],
     *[(live_id, label) for _, live_id, label in MOCK_LIVE_PATIENTS],
 ]
-
-
-def _load_dotenv(path: Path) -> None:
-    """Populate os.environ from a KEY=VALUE .env file (does not override existing)."""
-    if not path.exists():
-        return
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        os.environ.setdefault(key.strip(), val.strip())
 
 
 def _normalise_careplan_activity(care_plan: dict[str, Any]) -> None:
@@ -115,7 +112,9 @@ def _rehost_mock_bundle(source: Path, live_id: str) -> dict[str, Any]:
     }
 
 
-def _iter_resources(bundles: dict[str, dict[str, Any]]) -> Iterator[tuple[str, str, dict[str, Any]]]:
+def _iter_resources(
+    bundles: dict[str, dict[str, Any]],
+) -> Iterator[tuple[str, str, dict[str, Any]]]:
     """Yield (resourceType, id, resource) with all Patients before Condition/CarePlan."""
     for bundle in bundles.values():
         patient = bundle["patient"]
@@ -139,7 +138,6 @@ def _collect_bundles() -> dict[str, dict[str, Any]]:
 
 
 def main(argv: list[str]) -> int:
-    _load_dotenv(Path(__file__).parent / ".env")
     resources = list(_iter_resources(_collect_bundles()))
 
     if "--dry-run" in argv:
@@ -175,7 +173,9 @@ def main(argv: list[str]) -> int:
     return 0 if ok == len(resources) else 2
 
 
-def _put_with_retry(client: httpx.Client, url: str, resource: dict[str, Any]) -> httpx.Response:
+def _put_with_retry(
+    client: httpx.Client, url: str, resource: dict[str, Any]
+) -> httpx.Response:
     """PUT a resource, retrying on 429 with exponential backoff (1,2,4,8,16s)."""
     resp = client.put(url, content=json.dumps(resource))
     for attempt in range(MAX_RETRIES):

@@ -1,6 +1,7 @@
 import re
-from unittest.mock import MagicMock, ANY
-from db import create_communication, get_communication, update_communication
+from unittest.mock import ANY, MagicMock
+
+from app.db import create_communication, get_communication, update_communication
 
 ISO8601_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?\+\d{2}:\d{2}$")
 

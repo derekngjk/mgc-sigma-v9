@@ -24,28 +24,23 @@ There are no shared packages between the two services. The backend is the single
 ```text
 mgc-sigma-v9/
 ├── backend/                    FastAPI service (Python 3.11)
-│   ├── main.py                 Routes, CORS config, Pydantic response models, app bootstrap
-│   ├── db.py                   Supabase CRUD (PostgreSQL) — init_db, create_communication, get_communication, update_communication, get_or_create_family, get_or_create_primary_member, get_family_summary
-│   ├── fhir.py                 FHIR fetch + parse — fetch_patient_data, _fetch_from_sandbox, _parse_fhir_bundle
-│   ├── llm.py                  LLM translation — generate_summary, _call_llm (Anthropic + OpenAI)
+│   ├── app/                    Application package (import root: `app`)
+│   │   ├── main.py             create_app() factory, CORS, lifespan, router wiring; `app` ASGI entry
+│   │   ├── config.py           Settings (env vars, read live) + path anchors (MOCK_DATA_DIR, SYNTHEA_DIR)
+│   │   ├── schemas.py          Pydantic request/response models + validation sets
+│   │   ├── dependencies.py     verify_clinician_token FastAPI dependency (Supabase Auth)
+│   │   ├── routers/            health.py · clinician.py (patient/generate/approve) · family.py (viewer/audio)
+│   │   ├── services/           fhir.py · images.py · tts.py · summaries.py · prompts.py
+│   │   │   └── llm/            base.py (LLMProvider Protocol) · providers.py (Anthropic/OpenAI/Google) · get_provider()
+│   │   └── db/                 client.py · schema.py · communications.py · families.py · storage.py · _helpers.py
+│   ├── scripts/               Ops scripts — seed_healthx.py, synthea_to_fhir.py (run via `python -m scripts.<name>`)
 │   ├── mock_data/
 │   │   └── mock-oncology-123.json   Synthetic oncology fixture (bypasses Epic Sandbox)
-│   ├── pyproject.toml          Dependencies and tool configuration (uv, ruff)
-│   ├── requirements.txt        Production deps (fastapi, uvicorn, pydantic, httpx, supabase, psycopg)
-│   ├── requirements-dev.txt    Test deps (-r requirements.txt + pytest, pytest-mock)
-│   ├── pytest.ini              testpaths = tests, pythonpath = ., filterwarnings
-│   ├── runtime.txt             Pins Python version for Render
+│   ├── pyproject.toml          Deps ([project] + [dependency-groups] dev), pytest + ruff config — uv-managed
+│   ├── uv.lock                 Pinned dependency lockfile (single source of truth)
+│   ├── .python-version         Pins the Python version (read by uv; Render fallback)
 │   ├── .env.example            SUPABASE_URL · SUPABASE_KEY · SUPABASE_DB_URL · FHIR_BASE_URL · LLM_PROVIDER
-│   └── tests/
-│       ├── conftest.py         Mocks for Supabase and psycopg3
-│       ├── test_task_1_1.py    Health check + root endpoint (4 tests)
-│       ├── test_task_1_2.py    Supabase CRUD (5 tests)
-│       ├── test_task_2_1.py    FHIR fetcher + mock fallback (4 tests)
-│       ├── test_task_3_1.py    LLM translation (2 tests)
-│       ├── test_task_4_2.py    Approval + magic link (1 test)
-│       ├── test_task_4_3.py    Patient/family mobile viewer (2 tests)
-│       ├── test_change_tracking.py Condition change tracking (3 tests)
-│       └── test_family_route.py    Family member access route (3 tests)
+│   └── tests/                  pytest suite (imports the app via `app.*`; patches router/service module globals)
 │
 ├── frontend/                   React 18 + Vite + TypeScript + Tailwind CSS
 │   ├── src/
@@ -137,7 +132,7 @@ mgc-sigma-v9/
 cd backend
 uv sync
 cp .env.example .env       # set SUPABASE_URL, SUPABASE_KEY, SUPABASE_DB_URL
-uv run uvicorn main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
 #### Frontend (separate terminal)

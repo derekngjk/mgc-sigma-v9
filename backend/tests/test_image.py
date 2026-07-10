@@ -5,9 +5,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from image import ImageConfigError, ImageError, _make_image_prompt, generate_visual
-from main import app
-
+from app.main import app
+from app.services.images import (
+    ImageConfigError,
+    ImageError,
+    _make_image_prompt,
+    generate_visual,
+)
 
 # ── unit tests for image.py ───────────────────────────────────────────────────
 
@@ -179,7 +183,7 @@ def test_approve_calls_image_generation_when_flag_true(client, mock_supabase):
         data=[{"id": "mem-uuid"}]
     )
 
-    import main as main_module
+    from app.routers import clinician as main_module
 
     with patch.object(main_module, "_generate_and_cache_image") as mock_fn:
         res = client.post(
@@ -219,7 +223,7 @@ def test_approve_skips_image_generation_when_flag_false(client, mock_supabase):
         data=[{"id": "mem-uuid"}]
     )
 
-    import main as main_module
+    from app.routers import clinician as main_module
 
     with patch.object(main_module, "_generate_and_cache_image") as mock_fn:
         res = client.post(

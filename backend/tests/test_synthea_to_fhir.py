@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-import synthea_to_fhir as s
+from scripts import synthea_to_fhir as s
 
 PID = "test-uuid-1"
 
@@ -26,35 +26,120 @@ def synthea_dir(tmp_path: Path) -> Path:
     _write(
         tmp_path,
         "patients.csv",
-        ["Id", "BIRTHDATE", "DEATHDATE", "NRIC", "PREFIX", "FULL NAME", "LAST",
-         "FIRST", "SUFFIX", "MARITAL", "RACE", "NATIONALITY", "GENDER",
-         "ADDRESS", "POSTALCODE"],
-        [[PID, "2/6/1992", "", "S6090453C", "Mr.", "Aaron Teo", "Teo", "Aaron",
-          "", "M", "Chinese", "Singaporean", "M", "addr", "123"]],
+        [
+            "Id",
+            "BIRTHDATE",
+            "DEATHDATE",
+            "NRIC",
+            "PREFIX",
+            "FULL NAME",
+            "LAST",
+            "FIRST",
+            "SUFFIX",
+            "MARITAL",
+            "RACE",
+            "NATIONALITY",
+            "GENDER",
+            "ADDRESS",
+            "POSTALCODE",
+        ],
+        [
+            [
+                PID,
+                "2/6/1992",
+                "",
+                "S6090453C",
+                "Mr.",
+                "Aaron Teo",
+                "Teo",
+                "Aaron",
+                "",
+                "M",
+                "Chinese",
+                "Singaporean",
+                "M",
+                "addr",
+                "123",
+            ]
+        ],
     )
     _write(
         tmp_path,
         "conditions.csv",
         ["START", "STOP", "PATIENT", "ENCOUNTER", "CODE", "DESCRIPTION"],
         [
-            ["11/8/2011", "1/9/2011", PID, "enc1", "444814009", "Viral sinusitis (disorder)"],
+            [
+                "11/8/2011",
+                "1/9/2011",
+                PID,
+                "enc1",
+                "444814009",
+                "Viral sinusitis (disorder)",
+            ],
             ["1/5/2001", "", PID, "enc2", "40055000", "Chronic sinusitis (disorder)"],
-            ["1/1/2000", "2/2/2000", "other-pid", "enc3", "10509002", "Acute bronchitis (disorder)"],
+            [
+                "1/1/2000",
+                "2/2/2000",
+                "other-pid",
+                "enc3",
+                "10509002",
+                "Acute bronchitis (disorder)",
+            ],
         ],
     )
     _write(
         tmp_path,
         "careplans.csv",
-        ["Id", "START", "STOP", "PATIENT", "ENCOUNTER", "CODE", "DESCRIPTION",
-         "REASONCODE", "REASONDESCRIPTION"],
-        [["cp1", "22/1/2017", "12/2/2017", PID, "enc4", "225358003", "Wound care",
-          "284551006", "Laceration of foot"]],
+        [
+            "Id",
+            "START",
+            "STOP",
+            "PATIENT",
+            "ENCOUNTER",
+            "CODE",
+            "DESCRIPTION",
+            "REASONCODE",
+            "REASONDESCRIPTION",
+        ],
+        [
+            [
+                "cp1",
+                "22/1/2017",
+                "12/2/2017",
+                PID,
+                "enc4",
+                "225358003",
+                "Wound care",
+                "284551006",
+                "Laceration of foot",
+            ]
+        ],
     )
     _write(
         tmp_path,
         "observations.csv",
-        ["DATE", "PATIENT", "ENCOUNTER", "CODE", "DESCRIPTION", "VALUE", "UNITS", "TYPE"],
-        [["2012-01-23T17:45:28Z", PID, "enc5", "8302-2", "Body Height", "193.3", "cm", "numeric"]],
+        [
+            "DATE",
+            "PATIENT",
+            "ENCOUNTER",
+            "CODE",
+            "DESCRIPTION",
+            "VALUE",
+            "UNITS",
+            "TYPE",
+        ],
+        [
+            [
+                "2012-01-23T17:45:28Z",
+                PID,
+                "enc5",
+                "8302-2",
+                "Body Height",
+                "193.3",
+                "cm",
+                "numeric",
+            ]
+        ],
     )
     return tmp_path
 

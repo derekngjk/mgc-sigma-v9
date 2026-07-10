@@ -4,9 +4,9 @@ and the legacy GET /api/communications/{id} endpoint."""
 import pytest
 from fastapi.testclient import TestClient
 
-import main as _main
-from llm import LLMConfigError, LLMError
-from main import app
+from app.main import app
+from app.routers import family
+from app.services.llm import LLMConfigError, LLMError
 
 ENGLISH_TEXT = "Cancer treatment is underway. The care team is here for you."
 ZH_TEXT = "癌症治疗正在进行中。护理团队随时为您服务。"
@@ -36,8 +36,8 @@ def client() -> TestClient:
 
 @pytest.fixture(autouse=True)
 def stub_get_family_summary(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(_main, "get_family_summary", lambda fid, mid: APPROVED_RECORD)
-    monkeypatch.setattr(_main, "get_image_url", lambda cid: None)
+    monkeypatch.setattr(family, "get_family_summary", lambda fid, mid: APPROVED_RECORD)
+    monkeypatch.setattr(family, "get_image_url", lambda cid: None)
 
 
 def test_family_member_default_lang_returns_english(client: TestClient) -> None:
@@ -60,10 +60,10 @@ def test_family_member_invalid_lang_returns_400(client: TestClient) -> None:
 def test_family_member_cache_hit_returns_cached_text(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(_main, "get_translation", lambda comm_id, lang: ZH_TEXT)
+    monkeypatch.setattr(family, "get_translation", lambda comm_id, lang: ZH_TEXT)
     translate_called = []
     monkeypatch.setattr(
-        _main, "translate_summary", lambda t, _lang: translate_called.append(1) or ""
+        family, "translate_summary", lambda t, _lang: translate_called.append(1) or ""
     )
 
     resp = client.get("/api/family/fid-1/member/mid-1?lang=zh")
@@ -75,11 +75,11 @@ def test_family_member_cache_hit_returns_cached_text(
 def test_family_member_cache_miss_translates_and_caches(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(_main, "get_translation", lambda comm_id, lang: None)
-    monkeypatch.setattr(_main, "translate_summary", lambda text, lang: ZH_TEXT)
+    monkeypatch.setattr(family, "get_translation", lambda comm_id, lang: None)
+    monkeypatch.setattr(family, "translate_summary", lambda text, lang: ZH_TEXT)
     set_calls: list[tuple] = []
     monkeypatch.setattr(
-        _main, "set_translation", lambda c, lg, t: set_calls.append((c, lg, t))
+        family, "set_translation", lambda c, lg, t: set_calls.append((c, lg, t))
     )
 
     resp = client.get("/api/family/fid-1/member/mid-1?lang=zh")
@@ -91,9 +91,9 @@ def test_family_member_cache_miss_translates_and_caches(
 def test_family_member_translate_llm_error_returns_502(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(_main, "get_translation", lambda comm_id, lang: None)
+    monkeypatch.setattr(family, "get_translation", lambda comm_id, lang: None)
     monkeypatch.setattr(
-        _main,
+        family,
         "translate_summary",
         lambda t, _lang: (_ for _ in ()).throw(LLMError("upstream failed")),
     )
@@ -105,9 +105,9 @@ def test_family_member_translate_llm_error_returns_502(
 def test_family_member_translate_config_error_returns_503(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(_main, "get_translation", lambda comm_id, lang: None)
+    monkeypatch.setattr(family, "get_translation", lambda comm_id, lang: None)
     monkeypatch.setattr(
-        _main,
+        family,
         "translate_summary",
         lambda t, _lang: (_ for _ in ()).throw(LLMConfigError("key missing")),
     )
@@ -121,17 +121,17 @@ def test_family_member_translate_config_error_returns_503(
 
 @pytest.fixture
 def stub_get_communication(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(_main, "get_communication", lambda comm_id: APPROVED_RECORD)
+    monkeypatch.setattr(family, "get_communication", lambda comm_id: APPROVED_RECORD)
 
 
 def test_legacy_endpoint_cache_miss_translates(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, stub_get_communication: None
 ) -> None:
-    monkeypatch.setattr(_main, "get_translation", lambda comm_id, lang: None)
-    monkeypatch.setattr(_main, "translate_summary", lambda text, lang: ZH_TEXT)
+    monkeypatch.setattr(family, "get_translation", lambda comm_id, lang: None)
+    monkeypatch.setattr(family, "translate_summary", lambda text, lang: ZH_TEXT)
     set_calls: list[tuple] = []
     monkeypatch.setattr(
-        _main, "set_translation", lambda c, lg, t: set_calls.append((c, lg, t))
+        family, "set_translation", lambda c, lg, t: set_calls.append((c, lg, t))
     )
 
     resp = client.get("/api/communications/comm-001?lang=zh")

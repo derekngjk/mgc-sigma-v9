@@ -4,9 +4,9 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-import db
-from fhir import PatientNotFoundError
-from main import app
+from app import db
+from app.main import app
+from app.services.fhir import PatientNotFoundError
 
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
@@ -94,7 +94,9 @@ def test_mock_creates_draft_db_record(client: TestClient, mock_supabase) -> None
 def test_sandbox_returns_200(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, mock_supabase
 ) -> None:
-    monkeypatch.setattr("fhir._fetch_from_sandbox", lambda _: SANDBOX_BUNDLE)
+    monkeypatch.setattr(
+        "app.services.fhir._fetch_from_sandbox", lambda _: SANDBOX_BUNDLE
+    )
     # patients table: 1. select (get_latest), 2. upsert (create)
     mock_supabase.table("patients").execute.side_effect = [
         MagicMock(data=[]),  # get_latest
@@ -113,5 +115,5 @@ def test_unknown_patient_returns_404(
     def raise_not_found(_):
         raise PatientNotFoundError("not found")
 
-    monkeypatch.setattr("fhir._fetch_from_sandbox", raise_not_found)
+    monkeypatch.setattr("app.services.fhir._fetch_from_sandbox", raise_not_found)
     assert client.get("/api/patient/unknown-id").status_code == 404

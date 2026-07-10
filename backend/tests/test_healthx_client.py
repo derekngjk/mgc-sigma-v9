@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-import fhir
+from app.services import fhir
 
 
 class _FakeResponse:
@@ -22,7 +22,9 @@ class _FakeClient:
     last_headers: dict[str, str] = {}
     calls: list[str] = []
 
-    def __init__(self, timeout: float | None = None, headers: dict[str, str] | None = None) -> None:
+    def __init__(
+        self, timeout: float | None = None, headers: dict[str, str] | None = None
+    ) -> None:
         _FakeClient.last_headers = headers or {}
         _FakeClient.calls = []
 
@@ -43,7 +45,9 @@ class _FakeClient:
                     "gender": "male",
                 }
             )
-        return _FakeResponse({"resourceType": "Bundle", "type": "searchset", "entry": []})
+        return _FakeResponse(
+            {"resourceType": "Bundle", "type": "searchset", "entry": []}
+        )
 
 
 def test_fetch_sends_x_api_key_header(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -57,11 +61,16 @@ def test_fetch_sends_x_api_key_header(monkeypatch: pytest.MonkeyPatch) -> None:
     assert _FakeClient.last_headers.get("x-api-key") == "test-key-123"
     assert "Authorization" not in _FakeClient.last_headers
     # Patient read hits the R4B base URL with the tenant embedded in the path.
-    assert _FakeClient.calls[0] == "https://api.healthx.sg/fhir/r4b/tenant/Patient/patient-xyz"
+    assert (
+        _FakeClient.calls[0]
+        == "https://api.healthx.sg/fhir/r4b/tenant/Patient/patient-xyz"
+    )
     assert result["patient"]["birthDate"] == "1992-06-02"
 
 
-def test_fetch_without_key_sends_no_auth_header(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_without_key_sends_no_auth_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(fhir, "HEALTHX_API_KEY", "")
     monkeypatch.setattr(fhir, "FHIR_BASE_URL", "https://api.healthx.sg/fhir/r4b/tenant")
     monkeypatch.setattr(fhir.httpx, "Client", _FakeClient)

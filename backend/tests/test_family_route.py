@@ -1,7 +1,9 @@
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 from fastapi.testclient import TestClient
-from main import app
+
+from app.main import app
 
 APPROVED_TEXT = "Think of the cancer cells like weeds taking over a garden."
 FAMILY_ID = "fid-abc-123"

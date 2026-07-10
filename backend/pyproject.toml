@@ -2,7 +2,6 @@
 name = "mgc-backend"
 version = "0.1.0"
 description = "Backend for MGC"
-readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.34.0",
@@ -13,10 +12,39 @@ dependencies = [
     "psycopg[binary]>=3.2.0",
     "PyJWT>=2.9.0",
     "pydantic>=2.10.3",
-    "pytest>=8.3.4",
-    "pytest-mock>=3.14.0",
     "python-dotenv>=1.0.1",
-    "ruff>=0.8.0",
     "supabase>=2.10.0",
     "uvicorn[standard]>=0.32.1",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+    "pytest-mock>=3.14.0",
+    "ruff>=0.8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+    "ignore:The `gotrue` package is deprecated:DeprecationWarning",
+    "ignore:The `supafunc` package is deprecated:DeprecationWarning",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "scripts"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Security", "fastapi.Path", "fastapi.Body"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B"]

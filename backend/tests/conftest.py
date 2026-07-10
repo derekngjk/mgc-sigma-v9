@@ -1,14 +1,16 @@
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
-from main import app
-from auth import verify_clinician_token
+
+from app.dependencies import verify_clinician_token
+from app.main import app
 
 
 @pytest.fixture(autouse=True, scope="session")
 def mock_db_init():
     """Prevent init_db from trying to connect to a real Postgres in tests."""
-    with patch("db.psycopg.connect") as mocked:
+    with patch("app.db.schema.psycopg.connect") as mocked:
         yield mocked
 
 
@@ -50,7 +52,7 @@ def mock_supabase(mocker):
 
     mock_client.table.side_effect = get_table_mock
 
-    mocker.patch("db.get_supabase", return_value=mock_client)
+    mocker.patch("app.db.client.get_supabase", return_value=mock_client)
     return mock_client
 
 

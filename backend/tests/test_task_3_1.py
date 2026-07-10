@@ -1,8 +1,10 @@
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 from fastapi.testclient import TestClient
-import db
-from main import app
+
+from app import db
+from app.main import app
 
 MOCK_SUMMARY = "Think of the cancer cells like weeds taking over a garden..."
 
@@ -35,7 +37,7 @@ def test_generate_returns_200(
     seeded_comm_id: str,
     mock_supabase,
 ) -> None:
-    monkeypatch.setattr("llm._call_llm", lambda prompt: MOCK_SUMMARY)
+    monkeypatch.setattr("app.services.llm.complete", lambda prompt: MOCK_SUMMARY)
 
     mock_supabase.table("care_plan_translations").execute.side_effect = [
         MagicMock(
@@ -63,7 +65,7 @@ def test_generate_stores_summary_in_db(
     seeded_comm_id: str,
     mock_supabase,
 ) -> None:
-    monkeypatch.setattr("llm._call_llm", lambda prompt: MOCK_SUMMARY)
+    monkeypatch.setattr("app.services.llm.complete", lambda prompt: MOCK_SUMMARY)
 
     mock_supabase.table("care_plan_translations").execute.side_effect = [
         MagicMock(

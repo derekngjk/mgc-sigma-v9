@@ -1,11 +1,13 @@
-import os
+"""Text-to-speech via OpenAI, plus Markdown/sentence helpers for the audio route."""
+
 import re
 
-from llm import LLMConfigError
+from app.config import settings
+from app.services.llm import LLMConfigError
 
 
 def strip_markdown(text: str) -> str:
-    """Remove Markdown syntax before TTS — mirrors frontend/src/lib/markdown.ts:stripMarkdown()."""
+    """Remove Markdown syntax before TTS — mirrors frontend/src/lib/markdown.ts."""
     text = re.sub(r"^#{1,6}\s*", "", text, flags=re.MULTILINE)
     text = re.sub(r"\*\*(.+?)\*\*", r"\1", text, flags=re.DOTALL)
     text = re.sub(r"\*(.+?)\*", r"\1", text, flags=re.DOTALL)
@@ -30,7 +32,7 @@ def generate_tts(text: str) -> bytes:
 
     Raises LLMConfigError if OPENAI_API_KEY is not set.
     """
-    if not os.environ.get("OPENAI_API_KEY"):
+    if not settings.openai_api_key:
         raise LLMConfigError("OPENAI_API_KEY not set")
     from openai import OpenAI
 

@@ -1,19 +1,9 @@
-import os
+"""Prompt templates, audience/length instructions, and the translation glossary."""
 
-from dotenv import find_dotenv, load_dotenv
-
-load_dotenv(find_dotenv())
-
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-ANTHROPIC_MODEL = "claude-opus-4-7"
-OPENAI_MODEL = "gpt-4o"
-GEMINI_MODEL = "gemini-3.5-flash"
+VALID_AUDIENCES = {"patient", "spouse", "child", "caregiver"}
 
 # Singapore's four official languages available for family viewer translation.
-_SUPPORTED_LANGS: dict[str, str] = {
+SUPPORTED_LANGS: dict[str, str] = {
     "zh": "Simplified Chinese (简体中文)",
     "ms": "Malay (Bahasa Melayu)",
     "ta": "Tamil (தமிழ்)",
@@ -30,7 +20,7 @@ _SUPPORTED_LANGS: dict[str, str] = {
 #       EN→TA:      /dictionary/english-tamil/
 #   [3] Official institution names — MOH Singapore, NCCS, SingHealth
 #       https://www.nccs.com.sg  |  https://www.moh.gov.sg
-_CLINICAL_GLOSSARY: dict[str, dict[str, str]] = {
+CLINICAL_GLOSSARY: dict[str, dict[str, str]] = {
     "zh": {
         # Common clinical nouns — sources [1][2]
         "cancer": "癌症",
@@ -84,9 +74,7 @@ _CLINICAL_GLOSSARY: dict[str, dict[str, str]] = {
     },
 }
 
-VALID_AUDIENCES = {"patient", "spouse", "child", "caregiver"}
-
-_SYSTEM_PROMPT_BASE = (
+SYSTEM_PROMPT_BASE = (
     "You are a warm, plain-language health communicator writing for patients and families "
     "who have NO medical training. Turn the clinical data into a calm, easy-to-understand note "
     "that helps them understand what is happening and what to do.\n\n"
@@ -105,7 +93,7 @@ _SYSTEM_PROMPT_BASE = (
 )
 
 # Audience-specific tone and framing instructions.
-_AUDIENCE_INSTRUCTIONS: dict[str, str] = {
+AUDIENCE_INSTRUCTIONS: dict[str, str] = {
     "patient": (
         "Write directly to the patient using 'you' and 'your'. "
         "Be empowering and reassuring — the patient is the focus of care. "
@@ -135,7 +123,7 @@ _AUDIENCE_INSTRUCTIONS: dict[str, str] = {
 }
 
 # Length → word-count target and structural guidance injected into each prompt.
-_LENGTH_INSTRUCTIONS: dict[str, str] = {
+LENGTH_INSTRUCTIONS: dict[str, str] = {
     "short": (
         "Length: about 90-130 words. Use exactly these '## ' sections:\n"
         "## What is happening — the main problem in one or two plain sentences with a simple analogy, "
@@ -166,126 +154,3 @@ _LENGTH_INSTRUCTIONS: dict[str, str] = {
         "End with a warm, encouraging closing."
     ),
 }
-
-
-class LLMError(Exception): ...
-
-
-class LLMConfigError(LLMError): ...
-
-
-def generate_summary(
-    raw_clinical_text: str,
-    target_audience: str,
-    condition_diff: dict | None = None,
-    length: str = "medium",
-) -> str:
-    length_instruction = _LENGTH_INSTRUCTIONS.get(
-        length, _LENGTH_INSTRUCTIONS["medium"]
-    )
-
-    diff_section = ""
-    if condition_diff:
-        added = condition_diff.get("added", [])
-        removed = condition_diff.get("removed", [])
-        ongoing = condition_diff.get("ongoing", [])
-        parts: list[str] = []
-        if ongoing:
-            parts.append(f"Ongoing conditions: {', '.join(ongoing)}")
-        if added:
-            parts.append(f"New conditions since last report: {', '.join(added)}")
-        if removed:
-            parts.append(f"Resolved conditions since last report: {', '.join(removed)}")
-        if parts:
-            diff_section = "\n\nCondition summary:\n" + "\n".join(
-                f"- {p}" for p in parts
-            )
-        if added or removed:
-            diff_section += (
-                "\n\nChanges since last report: please mention these changes clearly."
-            )
-    audience_instruction = _AUDIENCE_INSTRUCTIONS.get(
-        target_audience, _AUDIENCE_INSTRUCTIONS["patient"]
-    )
-    prompt = (
-        f"{_SYSTEM_PROMPT_BASE}\n\n"
-        f"Audience: {audience_instruction}\n\n"
-        f"{length_instruction}"
-        f"{diff_section}\n\n"
-        f"Clinical data (JSON):\n{raw_clinical_text}"
-    )
-    return _call_llm(prompt)
-
-
-def translate_summary(text: str, lang: str) -> str:
-    """Translate an approved English summary into a Singapore official language.
-
-    Returns text unchanged for lang='en'.
-    Raises LLMConfigError for an unsupported language code or misconfigured provider.
-    Raises LLMError if the LLM call fails.
-    """
-    if lang == "en":
-        return text
-    if lang not in _SUPPORTED_LANGS:
-        raise LLMConfigError(
-            f"Unsupported language: {lang!r}. Supported non-English codes: {list(_SUPPORTED_LANGS)}"
-        )
-    lang_name = _SUPPORTED_LANGS[lang]
-    glossary = _CLINICAL_GLOSSARY.get(lang, {})
-    glossary_lines = "\n".join(f"  {en} → {target}" for en, target in glossary.items())
-    prompt = (
-        f"Translate the following patient health summary from English into {lang_name}.\n\n"
-        "Rules:\n"
-        "- Preserve the warm, empathetic tone exactly.\n"
-        "- Keep the same paragraph and heading structure (separate paragraphs with a blank line).\n"
-        "- Preserve all Markdown formatting markers exactly as they appear: **bold**, *italic*, ## headings, - list items.\n"
-        "- Use the medical term translations listed below for consistency.\n"
-        "- Return only the translated text. No explanations, no added commentary.\n\n"
-        f"Medical term reference (use these translations):\n{glossary_lines}\n\n"
-        f"Summary to translate:\n{text}"
-    )
-    # Tamil and Malay scripts are token-heavy (Tamil Unicode chars cost 2-4 tokens
-    # each in most tokenizers), so translations need more headroom than summaries.
-    return _call_llm(prompt, max_tokens=4096)
-
-
-def _call_llm(prompt: str, max_tokens: int = 1024) -> str:
-    if LLM_PROVIDER == "anthropic":
-        if not ANTHROPIC_API_KEY:
-            raise LLMConfigError("ANTHROPIC_API_KEY is not set")
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model=ANTHROPIC_MODEL,
-            max_tokens=max_tokens,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return message.content[0].text
-    elif LLM_PROVIDER == "openai":
-        if not OPENAI_API_KEY:
-            raise LLMConfigError("OPENAI_API_KEY is not set")
-        import openai
-
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-        )
-        return response.choices[0].message.content
-    elif LLM_PROVIDER == "google":
-        if not GEMINI_API_KEY:
-            raise LLMConfigError("GEMINI_API_KEY is not set")
-        from google import genai
-
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-        )
-        return response.text
-    else:
-        raise LLMConfigError(
-            f"Unknown LLM_PROVIDER: {LLM_PROVIDER!r}. Use 'anthropic', 'openai', or 'google'."
-        )
