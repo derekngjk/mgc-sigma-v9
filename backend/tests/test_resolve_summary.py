@@ -1,0 +1,56 @@
+"""Unit tests for the family router's resolve_summary_text translation helper."""
+
+import pytest
+from fastapi import HTTPException
+
+from app.routers import family
+from app.services.llm import LLMConfigError, LLMError
+
+
+def test_english_returns_source_unchanged() -> None:
+    assert family.resolve_summary_text("c1", "Hello", "en") == "Hello"
+
+
+def test_cache_hit_skips_translation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(family, "get_translation", lambda cid, lang: "CACHED")
+    calls: list[int] = []
+    monkeypatch.setattr(
+        family, "translate_summary", lambda t, lang: calls.append(1) or "X"
+    )
+    assert family.resolve_summary_text("c1", "src", "zh") == "CACHED"
+    assert not calls
+
+
+def test_cache_miss_translates_and_stores(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(family, "get_translation", lambda cid, lang: None)
+    monkeypatch.setattr(family, "translate_summary", lambda t, lang: "TRANSLATED")
+    stored: list[tuple] = []
+    monkeypatch.setattr(
+        family, "set_translation", lambda c, lang, t: stored.append((c, lang, t))
+    )
+    assert family.resolve_summary_text("c1", "src", "zh") == "TRANSLATED"
+    assert stored == [("c1", "zh", "TRANSLATED")]
+
+
+def test_config_error_maps_to_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(family, "get_translation", lambda cid, lang: None)
+
+    def boom(text: str, lang: str) -> str:
+        raise LLMConfigError("no key")
+
+    monkeypatch.setattr(family, "translate_summary", boom)
+    with pytest.raises(HTTPException) as exc:
+        family.resolve_summary_text("c1", "src", "zh")
+    assert exc.value.status_code == 503
+
+
+def test_llm_error_maps_to_502(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(family, "get_translation", lambda cid, lang: None)
+
+    def boom(text: str, lang: str) -> str:
+        raise LLMError("upstream")
+
+    monkeypatch.setattr(family, "translate_summary", boom)
+    with pytest.raises(HTTPException) as exc:
+        family.resolve_summary_text("c1", "src", "zh")
+    assert exc.value.status_code == 502
