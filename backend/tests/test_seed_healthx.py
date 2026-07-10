@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-import seed_healthx as seed
+from scripts import seed_healthx as seed
 
 
 @pytest.mark.parametrize("source, live_id, _label", seed.MOCK_LIVE_PATIENTS)

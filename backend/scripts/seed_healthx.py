@@ -13,8 +13,8 @@ Resources are PUT in dependency order (Patients, then Conditions, then CarePlans
 so subject references resolve. Config is read from backend/.env.
 
 Usage:
-    uv run python seed_healthx.py            # provision against the live tenant
-    uv run python seed_healthx.py --dry-run  # list resources, make no network calls
+    uv run python -m scripts.seed_healthx            # provision against the live tenant
+    uv run python -m scripts.seed_healthx --dry-run  # list resources, make no network calls
 """
 
 from __future__ import annotations
@@ -29,13 +29,13 @@ from typing import Any, Iterator
 
 import httpx
 
-from synthea_to_fhir import PATIENT_ALLOWLIST, build_all_bundles
+from app.config import MOCK_DATA_DIR
+from scripts.synthea_to_fhir import PATIENT_ALLOWLIST, build_all_bundles
 
 # The HX-IS API gateway rate-limits; throttle requests and back off on 429.
 REQUEST_DELAY_S = 0.35
 MAX_RETRIES = 5
 
-MOCK_DATA_DIR: Path = Path(__file__).parent / "mock_data"
 ONCOLOGY_LIVE_ID: str = "hx-oncology-001"
 ENDOCRINE_LIVE_ID: str = "hx-endocrine-001"
 
@@ -52,18 +52,6 @@ LIVE_PATIENTS: list[tuple[str, str]] = [
     *[(pid, name) for pid, name in PATIENT_ALLOWLIST.items()],
     *[(live_id, label) for _, live_id, label in MOCK_LIVE_PATIENTS],
 ]
-
-
-def _load_dotenv(path: Path) -> None:
-    """Populate os.environ from a KEY=VALUE .env file (does not override existing)."""
-    if not path.exists():
-        return
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        os.environ.setdefault(key.strip(), val.strip())
 
 
 def _normalise_careplan_activity(care_plan: dict[str, Any]) -> None:
@@ -139,7 +127,6 @@ def _collect_bundles() -> dict[str, dict[str, Any]]:
 
 
 def main(argv: list[str]) -> int:
-    _load_dotenv(Path(__file__).parent / ".env")
     resources = list(_iter_resources(_collect_bundles()))
 
     if "--dry-run" in argv:

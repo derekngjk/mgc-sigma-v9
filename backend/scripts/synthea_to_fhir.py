@@ -17,7 +17,7 @@ import csv
 from pathlib import Path
 from typing import Any
 
-SYNTHEA_DIR: Path = Path(__file__).resolve().parent.parent / "SyntheticPatientRecords"
+from app.config import SYNTHEA_DIR
 
 SNOMED_SYSTEM = "http://snomed.info/sct"
 NRIC_SYSTEM = "https://www.moh.gov.sg/NRIC"

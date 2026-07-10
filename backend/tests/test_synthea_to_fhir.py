@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-import synthea_to_fhir as s
+from scripts import synthea_to_fhir as s
 
 PID = "test-uuid-1"
 
