@@ -905,6 +905,18 @@ The former `llm._call_llm` was a single `if/elif` over `LLM_PROVIDER` that re-in
 
 The suite couples to modules by string path (`monkeypatch.setattr("llm._call_llm", ...)`, `mocker.patch("db.get_supabase")`) and by patching route-handler globals (`setattr(main, "get_family_summary", ...)`). To keep these working after the split, db submodules call `client.get_supabase()` through the `client` module object (not a bound import), so a single patch of `app.db.client.get_supabase` covers all of them; routers import their dependencies as module-level names, so patching `app.routers.family.translate_summary` (etc.) still intercepts the call. Test patch targets were repointed from `main`/`db`/`llm`/`fhir` to the specific new module that owns each seam.
 
+### Follow-ups after the split
+
+**Provider errors → `LLMError`:** each provider's `complete()` now wraps the vendor API call in `try/except` and re-raises failures as `LLMError`, so the routers' existing `except LLMError → 502` handling applies instead of an unhandled 500. Missing-key checks still raise `LLMConfigError` (→ 503) before the call. Covered by `tests/test_llm.py`.
+
+**Added unit tests** for the seams the refactor introduced: `get_provider()` dispatch and error wrapping (`test_llm.py`), `resolve_summary_text` cache/translate/error mapping (`test_resolve_summary.py`), and `Settings` defaults + live env reads (`test_config.py`). Suite went 79 → 92.
+
+**uv-only dependency management:** `requirements.txt` and `requirements-dev.txt` were removed. Runtime deps live in `[project.dependencies]`; `pytest`, `pytest-mock`, and `ruff` moved to `[dependency-groups] dev`. `pytest.ini` was folded into `[tool.pytest.ini_options]`. `uv.lock` is the single source of truth (`uv sync` / `uv sync --no-dev`).
+
 ### Deployment change (needs human review)
 
-`render.yaml`'s start command changed from `uvicorn main:app` to `uvicorn app.main:app`. This is the only externally-visible change; there is no API path change. `rootDir: backend` and the `requirements.txt` build command are unchanged.
+Two `render.yaml` changes, both backend-only (no API path change):
+- Start command: `uvicorn main:app` → `uv run --no-sync uvicorn app.main:app`.
+- Build command: `pip install -r requirements.txt` → `pip install uv && uv sync --frozen --no-dev` (installs runtime deps only, from the lockfile).
+
+`rootDir: backend` and the Python version pin are unchanged. This path was verified locally (`uv sync --frozen --no-dev` then importing `app.main`) but not against Render's build environment — confirm on the next deploy.

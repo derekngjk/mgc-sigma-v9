@@ -36,10 +36,8 @@ mgc-sigma-v9/
 │   ├── scripts/               Ops scripts — seed_healthx.py, synthea_to_fhir.py (run via `python -m scripts.<name>`)
 │   ├── mock_data/
 │   │   └── mock-oncology-123.json   Synthetic oncology fixture (bypasses Epic Sandbox)
-│   ├── pyproject.toml          Dependencies and tool configuration (uv, ruff)
-│   ├── requirements.txt        Production deps (fastapi, uvicorn, pydantic, httpx, supabase, psycopg)
-│   ├── requirements-dev.txt    Test deps (-r requirements.txt + pytest, pytest-mock)
-│   ├── pytest.ini              testpaths = tests, pythonpath = ., filterwarnings
+│   ├── pyproject.toml          Deps ([project] + [dependency-groups] dev), pytest + ruff config — uv-managed
+│   ├── uv.lock                 Pinned dependency lockfile (single source of truth)
 │   ├── runtime.txt             Pins Python version for Render
 │   ├── .env.example            SUPABASE_URL · SUPABASE_KEY · SUPABASE_DB_URL · FHIR_BASE_URL · LLM_PROVIDER
 │   └── tests/                  pytest suite (imports the app via `app.*`; patches router/service module globals)
