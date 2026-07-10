@@ -2,6 +2,7 @@
 
 import json
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -62,7 +63,7 @@ def _generate_and_cache_image(
 @router.get("/api/patient/{epic_patient_id}", response_model=PatientResponse)
 def get_patient(
     epic_patient_id: str,
-    _: dict = Depends(verify_clinician_token),
+    _: dict[str, Any] = Depends(verify_clinician_token),
 ) -> PatientResponse:
     try:
         data = fetch_patient_data(epic_patient_id)
@@ -109,7 +110,7 @@ def get_patient(
 @router.post("/api/generate", response_model=GenerateResponse)
 def generate(
     req: GenerateRequest,
-    _: dict = Depends(verify_clinician_token),
+    _: dict[str, Any] = Depends(verify_clinician_token),
 ) -> GenerateResponse:
     if req.length not in VALID_LENGTHS:
         raise HTTPException(
@@ -150,7 +151,7 @@ def generate(
 def approve_communication(
     comm_id: str,
     req: ApproveRequest,
-    user: dict = Depends(verify_clinician_token),
+    user: dict[str, Any] = Depends(verify_clinician_token),
 ) -> ApproveResponse:
     record = get_communication(comm_id)
     if record is None:

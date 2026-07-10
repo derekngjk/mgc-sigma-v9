@@ -1,6 +1,7 @@
 """Patient/family-facing endpoints: approved summary, translation, and audio."""
 
 import json
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -34,7 +35,7 @@ def _validate_lang(lang: str) -> None:
         )
 
 
-def _condition_diff(record: dict) -> ConditionDiff:
+def _condition_diff(record: dict[str, Any]) -> ConditionDiff:
     diff_raw = (
         json.loads(record["condition_diff"])
         if record.get("condition_diff")

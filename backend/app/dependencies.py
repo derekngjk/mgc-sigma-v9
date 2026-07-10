@@ -1,5 +1,7 @@
 """FastAPI dependencies shared across routers."""
 
+from typing import Any
+
 import httpx
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -11,7 +13,7 @@ _bearer = HTTPBearer()
 
 def verify_clinician_token(
     credentials: HTTPAuthorizationCredentials = Security(_bearer),
-) -> dict:
+) -> dict[str, Any]:
     """Validate the bearer token against the Supabase Auth API."""
     if not settings.supabase_url or not settings.supabase_key:
         raise HTTPException(

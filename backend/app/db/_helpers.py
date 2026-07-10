@@ -46,7 +46,7 @@ def get_json_column(comm_id: str, column: str, key: str) -> str | None:
     if not res.data:
         return None
     raw = res.data[0].get(column) or {}
-    values: dict = json.loads(raw) if isinstance(raw, str) else raw
+    values: dict[str, Any] = json.loads(raw) if isinstance(raw, str) else raw
     return values.get(key)
 
 
@@ -62,7 +62,7 @@ def set_json_column(comm_id: str, column: str, key: str, value: str) -> None:
     if not res.data:
         return
     raw = res.data[0].get(column) or {}
-    current: dict = json.loads(raw) if isinstance(raw, str) else raw
+    current: dict[str, Any] = json.loads(raw) if isinstance(raw, str) else raw
     current[key] = value
     (
         supabase.table("care_plan_translations")

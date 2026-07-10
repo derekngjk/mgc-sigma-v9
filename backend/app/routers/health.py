@@ -13,5 +13,5 @@ def health() -> HealthResponse:
 
 
 @router.get("/")
-def root() -> dict:
+def root() -> dict[str, str]:
     return {"message": "MGC PoC API. See /health and /docs."}

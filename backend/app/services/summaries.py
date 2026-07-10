@@ -1,5 +1,7 @@
 """Build patient/family-facing prompts and run them through the configured LLM."""
 
+from typing import Any
+
 from app.services import llm
 from app.services.prompts import (
     AUDIENCE_INSTRUCTIONS,
@@ -16,7 +18,7 @@ __all__ = ["VALID_AUDIENCES", "generate_summary", "translate_summary"]
 def generate_summary(
     raw_clinical_text: str,
     target_audience: str,
-    condition_diff: dict | None = None,
+    condition_diff: dict[str, Any] | None = None,
     length: str = "medium",
 ) -> str:
     length_instruction = LENGTH_INSTRUCTIONS.get(length, LENGTH_INSTRUCTIONS["medium"])
