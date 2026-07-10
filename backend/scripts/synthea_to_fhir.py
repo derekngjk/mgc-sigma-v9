@@ -4,7 +4,7 @@ The raw CSVs delivered by Synapxe are Windows-CRLF and heavily padded with
 empty rows; only a handful of patients have joinable Patient+Condition+CarePlan
 data (see memory/synthetic-patient-records.md). This module reads those CSVs and
 emits FHIR R4B resources in the same ``{patient, conditions, care_plans}`` shape
-that :func:`fhir._parse_fhir_bundle` consumes, so the seeded records flow through
+that :func:`app.services.fhir._parse_fhir_bundle` consumes, so the seeded records flow through
 the existing pipeline unchanged.
 
 Clinical status is faithful to the source: a Condition/CarePlan is ``active``

@@ -91,7 +91,7 @@ GEMINI_API_KEY=your-key
 Start the backend:
 
 ```bash
-uv run uvicorn main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
 Verify it's running:
@@ -195,13 +195,17 @@ After deploying, add your production frontend URL to the Supabase redirect URLs 
 ```text
 mgc-sigma-v9/
 ├── backend/
-│   ├── main.py               Routes + Pydantic models
-│   ├── db.py                 Supabase CRUD — patients, care_plan_translations, families, family_members
-│   ├── fhir.py               Synapxe HealthX FHIR R4 fetcher + parser
-│   ├── llm.py                LLM translation — Anthropic, OpenAI, Gemini
-│   ├── auth.py               JWT verification dependency (Supabase-issued tokens)
+│   ├── app/
+│   │   ├── main.py           create_app() factory + `app` ASGI entry
+│   │   ├── config.py         Settings (env) + path anchors
+│   │   ├── schemas.py        Pydantic models + validation sets
+│   │   ├── dependencies.py   JWT verification dependency (Supabase-issued tokens)
+│   │   ├── routers/          health, clinician, family
+│   │   ├── services/         fhir · images · tts · summaries · prompts · llm/ (provider abstraction)
+│   │   └── db/               Supabase CRUD — patients, care_plan_translations, families, family_members
+│   ├── scripts/              Ops scripts — seed_healthx, synthea_to_fhir
 │   ├── mock_data/            Synthetic FHIR fixture — Tan Mei Ling, NCCS oncology
-│   └── tests/                pytest suite (24 tests, fully mocked)
+│   └── tests/                pytest suite (fully mocked)
 └── frontend/
     └── src/
         ├── lib/supabase.ts   Supabase client singleton
