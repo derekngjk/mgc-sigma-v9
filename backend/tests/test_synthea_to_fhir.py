@@ -50,6 +50,12 @@ def synthea_dir(tmp_path: Path) -> Path:
         [["cp1", "22/1/2017", "12/2/2017", PID, "enc4", "225358003", "Wound care",
           "284551006", "Laceration of foot"]],
     )
+    _write(
+        tmp_path,
+        "observations.csv",
+        ["DATE", "PATIENT", "ENCOUNTER", "CODE", "DESCRIPTION", "VALUE", "UNITS", "TYPE"],
+        [["2012-01-23T17:45:28Z", PID, "enc5", "8302-2", "Body Height", "193.3", "cm", "numeric"]],
+    )
     return tmp_path
 
 

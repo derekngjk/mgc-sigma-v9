@@ -105,7 +105,12 @@ def _rehost_mock_bundle(source: Path, live_id: str) -> dict[str, Any]:
         "care_plans": {
             "resourceType": "Bundle",
             "type": "searchset",
-            "entry": _rehost(raw["care_plans"]["entry"], "cp"),
+            "entry": _rehost(raw.get("care_plans", {}).get("entry", []), "cp"),
+        },
+        "observations": {
+            "resourceType": "Bundle",
+            "type": "searchset",
+            "entry": _rehost(raw.get("observations", {}).get("entry", []), "obs"),
         },
     }
 
@@ -119,8 +124,11 @@ def _iter_resources(bundles: dict[str, dict[str, Any]]) -> Iterator[tuple[str, s
         for entry in bundle["conditions"]["entry"]:
             yield "Condition", entry["resource"]["id"], entry["resource"]
     for bundle in bundles.values():
-        for entry in bundle["care_plans"]["entry"]:
+        for entry in bundle.get("care_plans", {}).get("entry", []):
             yield "CarePlan", entry["resource"]["id"], entry["resource"]
+    for bundle in bundles.values():
+        for entry in bundle.get("observations", {}).get("entry", []):
+            yield "Observation", entry["resource"]["id"], entry["resource"]
 
 
 def _collect_bundles() -> dict[str, dict[str, Any]]:

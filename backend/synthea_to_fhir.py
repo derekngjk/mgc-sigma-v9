@@ -115,6 +115,10 @@ def _build_condition(patient_id: str, index: int, row: dict[str, str]) -> dict[s
             "text": row.get("DESCRIPTION", ""),
         },
     }
+    encounter = row.get("ENCOUNTER", "")
+    if encounter:
+        condition["encounter"] = {"reference": f"Encounter/{encounter}"}
+
     onset = _to_iso_date(row.get("START", ""))
     if onset:
         condition["onsetDateTime"] = onset
@@ -151,6 +155,10 @@ def _build_careplan(patient_id: str, index: int, row: dict[str, str]) -> dict[st
             }
         ],
     }
+    encounter = row.get("ENCOUNTER", "")
+    if encounter:
+        care_plan["encounter"] = {"reference": f"Encounter/{encounter}"}
+
     period: dict[str, str] = {}
     start = _to_iso_date(row.get("START", ""))
     end = _to_iso_date(row.get("STOP", ""))
@@ -161,6 +169,52 @@ def _build_careplan(patient_id: str, index: int, row: dict[str, str]) -> dict[st
     if period:
         care_plan["period"] = period
     return care_plan
+
+
+def _build_observation(patient_id: str, index: int, row: dict[str, str]) -> dict[str, Any]:
+    observation: dict[str, Any] = {
+        "resourceType": "Observation",
+        "id": f"{patient_id}-obs-{index}",
+        "status": "final",
+        "subject": {"reference": f"Patient/{patient_id}"},
+        "code": {
+            "coding": [
+                {
+                    "system": "http://loinc.org",
+                    "code": row.get("CODE", ""),
+                    "display": row.get("DESCRIPTION", ""),
+                }
+            ],
+            "text": row.get("DESCRIPTION", ""),
+        },
+    }
+    date = row.get("DATE", "")
+    if date:
+        observation["effectiveDateTime"] = date
+
+    encounter = row.get("ENCOUNTER", "")
+    if encounter:
+        observation["encounter"] = {"reference": f"Encounter/{encounter}"}
+
+    value = row.get("VALUE", "")
+    units = row.get("UNITS", "")
+    val_type = row.get("TYPE", "")
+    
+    if val_type == "numeric" and value:
+        try:
+            val_float = float(value)
+            observation["valueQuantity"] = {
+                "value": val_float,
+                "unit": units,
+                "system": "http://unitsofmeasure.org",
+                "code": units
+            }
+        except ValueError:
+            observation["valueString"] = value
+    elif value:
+        observation["valueString"] = value
+
+    return observation
 
 
 # ── public API ────────────────────────────────────────────────────────────────
@@ -189,6 +243,12 @@ def build_patient_bundle(patient_id: str, base_dir: Path = SYNTHEA_DIR) -> dict[
             (r for r in _read_rows(base_dir, "careplans.csv") if r.get("PATIENT") == patient_id)
         )
     ]
+    observations = [
+        _build_observation(patient_id, i, r)
+        for i, r in enumerate(
+            (r for r in _read_rows(base_dir, "observations.csv") if r.get("PATIENT") == patient_id)
+        )
+    ]
     return {
         "patient": _build_patient(patient_rows[patient_id]),
         "conditions": {
@@ -200,6 +260,11 @@ def build_patient_bundle(patient_id: str, base_dir: Path = SYNTHEA_DIR) -> dict[
             "resourceType": "Bundle",
             "type": "searchset",
             "entry": [{"resource": c} for c in care_plans],
+        },
+        "observations": {
+            "resourceType": "Bundle",
+            "type": "searchset",
+            "entry": [{"resource": o} for o in observations],
         },
     }
 
@@ -216,5 +281,6 @@ if __name__ == "__main__":
         bundle = build_patient_bundle(pid)
         n_cond = len(bundle["conditions"]["entry"])
         n_cp = len(bundle["care_plans"]["entry"])
-        print(f"{name} ({pid}): {n_cond} conditions, {n_cp} care plans")
+        n_obs = len(bundle["observations"]["entry"])
+        print(f"{name} ({pid}): {n_cond} conditions, {n_cp} care plans, {n_obs} observations")
         print(json.dumps(bundle, indent=2))

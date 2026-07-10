@@ -55,7 +55,11 @@ def fetch_patient_data(epic_patient_id: str) -> dict[str, Any]:
     return {
         **parsed,
         "raw_fhir_json": json.dumps(
-            {"conditions": raw["conditions"], "care_plans": raw["care_plans"]},
+            {
+                "conditions": raw.get("conditions"), 
+                "care_plans": raw.get("care_plans"),
+                "observations": raw.get("observations")
+            },
             separators=(",", ":"),
         ),
         "fhir_source": "sandbox",
@@ -73,7 +77,11 @@ def load_mock_patient(patient_id: str = "mock-oncology-123") -> dict[str, Any]:
     return {
         **parsed,
         "raw_fhir_json": json.dumps(
-            {"conditions": raw["conditions"], "care_plans": raw["care_plans"]},
+            {
+                "conditions": raw.get("conditions"), 
+                "care_plans": raw.get("care_plans"),
+                "observations": raw.get("observations")
+            },
             separators=(",", ":"),
         ),
         "fhir_source": "mock",
@@ -84,7 +92,7 @@ def load_mock_patient(patient_id: str = "mock-oncology-123") -> dict[str, Any]:
 
 
 def _fetch_from_sandbox(patient_id: str) -> dict[str, Any]:
-    """Make three synchronous FHIR R4B calls against the Synapxe HealthX sandbox."""
+    """Make four synchronous FHIR R4B calls against the Synapxe HealthX sandbox."""
     base = FHIR_BASE_URL.rstrip("/")
     timeout = 10.0
     headers: dict[str, str] = {}
@@ -118,6 +126,15 @@ def _fetch_from_sandbox(patient_id: str) -> dict[str, Any]:
                     f"CarePlan.Search returned {care_plan_resp.status_code}"
                 )
 
+            observation_resp = client.get(
+                f"{base}/Observation",
+                params={"patient": patient_id},
+            )
+            if observation_resp.status_code != 200:
+                raise FHIRError(
+                    f"Observation.Search returned {observation_resp.status_code}"
+                )
+
     except (httpx.TimeoutException, httpx.NetworkError) as exc:
         raise FHIRError(f"FHIR sandbox unreachable: {exc}") from exc
 
@@ -125,6 +142,7 @@ def _fetch_from_sandbox(patient_id: str) -> dict[str, Any]:
         "patient": patient_resp.json(),
         "conditions": condition_resp.json(),
         "care_plans": care_plan_resp.json(),
+        "observations": observation_resp.json(),
     }
 
 
