@@ -5,7 +5,7 @@ from app.services.llm.base import LLMConfigError, LLMError
 
 ANTHROPIC_MODEL = "claude-opus-4-7"
 OPENAI_MODEL = "gpt-4o"
-GEMINI_MODEL = "gemini-3.5-flash"
+GEMINI_MODEL = "gemini-3.1-flash-lite"
 
 
 class AnthropicProvider:
