@@ -37,7 +37,9 @@ class Settings:
 
     @property
     def fhir_base_url(self) -> str:
-        return os.getenv("FHIR_BASE_URL", "https://api.healthx.sg/fhir/r4b/your-tenant-id")
+        return os.getenv(
+            "FHIR_BASE_URL", "https://api.healthx.sg/fhir/r4b/your-tenant-id"
+        )
 
     @property
     def healthx_api_key(self) -> str:

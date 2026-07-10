@@ -89,7 +89,9 @@ def _build_patient(row: dict[str, str]) -> dict[str, Any]:
     return patient
 
 
-def _build_condition(patient_id: str, index: int, row: dict[str, str]) -> dict[str, Any]:
+def _build_condition(
+    patient_id: str, index: int, row: dict[str, str]
+) -> dict[str, Any]:
     resolved = bool(row.get("STOP", "").strip())
     condition: dict[str, Any] = {
         "resourceType": "Condition",
@@ -171,7 +173,9 @@ def _build_careplan(patient_id: str, index: int, row: dict[str, str]) -> dict[st
     return care_plan
 
 
-def _build_observation(patient_id: str, index: int, row: dict[str, str]) -> dict[str, Any]:
+def _build_observation(
+    patient_id: str, index: int, row: dict[str, str]
+) -> dict[str, Any]:
     observation: dict[str, Any] = {
         "resourceType": "Observation",
         "id": f"{patient_id}-obs-{index}",
@@ -199,7 +203,7 @@ def _build_observation(patient_id: str, index: int, row: dict[str, str]) -> dict
     value = row.get("VALUE", "")
     units = row.get("UNITS", "")
     val_type = row.get("TYPE", "")
-    
+
     if val_type == "numeric" and value:
         try:
             val_float = float(value)
@@ -207,7 +211,7 @@ def _build_observation(patient_id: str, index: int, row: dict[str, str]) -> dict
                 "value": val_float,
                 "unit": units,
                 "system": "http://unitsofmeasure.org",
-                "code": units
+                "code": units,
             }
         except ValueError:
             observation["valueString"] = value
@@ -220,7 +224,9 @@ def _build_observation(patient_id: str, index: int, row: dict[str, str]) -> dict
 # ── public API ────────────────────────────────────────────────────────────────
 
 
-def build_patient_bundle(patient_id: str, base_dir: Path = SYNTHEA_DIR) -> dict[str, Any]:
+def build_patient_bundle(
+    patient_id: str, base_dir: Path = SYNTHEA_DIR
+) -> dict[str, Any]:
     """Build the ``{patient, conditions, care_plans}`` resource set for one patient.
 
     ``conditions`` / ``care_plans`` are FHIR searchset Bundles so the result is
@@ -234,19 +240,25 @@ def build_patient_bundle(patient_id: str, base_dir: Path = SYNTHEA_DIR) -> dict[
     conditions = [
         _build_condition(patient_id, i, r)
         for i, r in enumerate(
-            (r for r in _read_rows(base_dir, "conditions.csv") if r.get("PATIENT") == patient_id)
+            r
+            for r in _read_rows(base_dir, "conditions.csv")
+            if r.get("PATIENT") == patient_id
         )
     ]
     care_plans = [
         _build_careplan(patient_id, i, r)
         for i, r in enumerate(
-            (r for r in _read_rows(base_dir, "careplans.csv") if r.get("PATIENT") == patient_id)
+            r
+            for r in _read_rows(base_dir, "careplans.csv")
+            if r.get("PATIENT") == patient_id
         )
     ]
     observations = [
         _build_observation(patient_id, i, r)
         for i, r in enumerate(
-            (r for r in _read_rows(base_dir, "observations.csv") if r.get("PATIENT") == patient_id)
+            r
+            for r in _read_rows(base_dir, "observations.csv")
+            if r.get("PATIENT") == patient_id
         )
     ]
     return {
@@ -282,5 +294,7 @@ if __name__ == "__main__":
         n_cond = len(bundle["conditions"]["entry"])
         n_cp = len(bundle["care_plans"]["entry"])
         n_obs = len(bundle["observations"]["entry"])
-        print(f"{name} ({pid}): {n_cond} conditions, {n_cp} care plans, {n_obs} observations")
+        print(
+            f"{name} ({pid}): {n_cond} conditions, {n_cp} care plans, {n_obs} observations"
+        )
         print(json.dumps(bundle, indent=2))

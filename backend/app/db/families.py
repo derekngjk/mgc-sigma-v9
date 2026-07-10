@@ -10,9 +10,7 @@ from app.db._helpers import latest_approved_for_patient
 def get_or_create_family(patient_id: str) -> str:
     """Return the existing family_id for this patient, or create one."""
     supabase = client.get_supabase()
-    res = (
-        supabase.table("families").select("id").eq("patient_id", patient_id).execute()
-    )
+    res = supabase.table("families").select("id").eq("patient_id", patient_id).execute()
     if res.data:
         return res.data[0]["id"]
     family_id = str(uuid.uuid4())
