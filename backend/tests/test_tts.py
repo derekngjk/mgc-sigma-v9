@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 import main as _main
 from app.services.llm import LLMConfigError
 from main import app
-from tts import split_sentences, strip_markdown
+from app.services.tts import split_sentences, strip_markdown
 
 ENGLISH_TEXT = "Cancer treatment is underway. The care team is here for you."
 AUDIO_URL = (
@@ -87,10 +87,10 @@ def test_generate_tts_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeClient:
         audio = FakeAudio()
 
-    import tts as _tts
+    import app.services.tts as _tts
 
     monkeypatch.setattr(_tts, "generate_tts", lambda text: FAKE_MP3)
-    from tts import generate_tts
+    from app.services.tts import generate_tts
 
     result = generate_tts("Hello world")
     assert result == FAKE_MP3
@@ -98,13 +98,13 @@ def test_generate_tts_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_generate_tts_missing_key_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    import tts as _tts
+    import app.services.tts as _tts
 
     # Restore real generate_tts to test the key check
     import importlib
 
     importlib.reload(_tts)
-    from tts import generate_tts as real_generate_tts
+    from app.services.tts import generate_tts as real_generate_tts
 
     with pytest.raises(LLMConfigError, match="OPENAI_API_KEY"):
         real_generate_tts("Hello world")

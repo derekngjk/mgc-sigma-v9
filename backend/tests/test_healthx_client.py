@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-import fhir
+from app.services import fhir
 
 
 class _FakeResponse:

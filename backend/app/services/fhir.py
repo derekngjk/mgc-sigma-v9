@@ -1,32 +1,14 @@
+"""FHIR R4B fetch + parse against the Synapxe HealthX sandbox, with a mock fallback."""
+
 import json
-import os
-from pathlib import Path
 from typing import Any
 
 import httpx
-from dotenv import find_dotenv, load_dotenv
 
-# Load .env before reading config below, so the live endpoint + API key are
-# populated regardless of import order (mirrors llm.py). Without this, main.py
-# imports fhir before llm loads .env, freezing the placeholder defaults — and
-# every live fetch then 502s (wrong tenant URL, missing x-api-key).
-load_dotenv(find_dotenv())
+from app.config import MOCK_DATA_DIR, settings
 
-# Synapxe HealthX Innovation Sandbox (HX-IS) — FHIR R4B endpoint.
-# The tenant ID is embedded in the URL path; obtain both the URL and the API
-# key from your HX-IS API Portal application (https://innovation.healthx.sg/).
-FHIR_BASE_URL: str = os.getenv(
-    "FHIR_BASE_URL",
-    "https://api.healthx.sg/fhir/r4b/your-tenant-id",
-)
-# Per-tenant API key issued by the HealthX API Portal, sent as the `x-api-key`
-# header. Leave empty to make unauthenticated requests (only the mock fallback
-# path works without a key).
-HEALTHX_API_KEY: str = os.getenv("HEALTHX_API_KEY", "")
-MOCK_DATA_DIR: Path = Path(__file__).parent / "mock_data"
-
-
-# ── exceptions ────────────────────────────────────────────────────────────────
+FHIR_BASE_URL: str = settings.fhir_base_url
+HEALTHX_API_KEY: str = settings.healthx_api_key
 
 
 class FHIRError(Exception):
@@ -37,31 +19,18 @@ class PatientNotFoundError(FHIRError):
     """Raised when the FHIR sandbox returns 404 for the requested patient ID."""
 
 
-# ── public API ────────────────────────────────────────────────────────────────
-
-
 def fetch_patient_data(epic_patient_id: str) -> dict[str, Any]:
-    """Entry point for the route handler.
+    """Return a normalised patient dict from the mock loader or the live sandbox.
 
-    Dispatches to the mock loader or the live sandbox, then returns a
-    normalised dict with keys:
-        patient_name, dob, gender, conditions, raw_fhir_json, fhir_source
+    Keys: patient_name, dob, gender, conditions, raw_fhir_json, fhir_source.
     """
     mock_path = MOCK_DATA_DIR / f"{epic_patient_id}.json"
     if mock_path.exists():
         return load_mock_patient(epic_patient_id)
     raw = _fetch_from_sandbox(epic_patient_id)
-    parsed = _parse_fhir_bundle(raw)
     return {
-        **parsed,
-        "raw_fhir_json": json.dumps(
-            {
-                "conditions": raw.get("conditions"), 
-                "care_plans": raw.get("care_plans"),
-                "observations": raw.get("observations")
-            },
-            separators=(",", ":"),
-        ),
+        **_parse_fhir_bundle(raw),
+        "raw_fhir_json": _serialise_clinical_json(raw),
         "fhir_source": "sandbox",
     }
 
@@ -73,22 +42,22 @@ def load_mock_patient(patient_id: str = "mock-oncology-123") -> dict[str, Any]:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError) as exc:
         raise FHIRError(f"Failed to load mock data: {exc}") from exc
-    parsed = _parse_fhir_bundle(raw)
     return {
-        **parsed,
-        "raw_fhir_json": json.dumps(
-            {
-                "conditions": raw.get("conditions"), 
-                "care_plans": raw.get("care_plans"),
-                "observations": raw.get("observations")
-            },
-            separators=(",", ":"),
-        ),
+        **_parse_fhir_bundle(raw),
+        "raw_fhir_json": _serialise_clinical_json(raw),
         "fhir_source": "mock",
     }
 
 
-# ── internal helpers ──────────────────────────────────────────────────────────
+def _serialise_clinical_json(raw: dict[str, Any]) -> str:
+    return json.dumps(
+        {
+            "conditions": raw.get("conditions"),
+            "care_plans": raw.get("care_plans"),
+            "observations": raw.get("observations"),
+        },
+        separators=(",", ":"),
+    )
 
 
 def _fetch_from_sandbox(patient_id: str) -> dict[str, Any]:
@@ -147,14 +116,12 @@ def _fetch_from_sandbox(patient_id: str) -> dict[str, Any]:
 
 
 def _parse_fhir_bundle(raw: dict[str, Any]) -> dict[str, Any]:
-    """Extract structured fields from a raw FHIR bundle dict.
+    """Extract patient_name, dob, gender, and active conditions from a FHIR bundle.
 
-    Returns: patient_name, dob, gender, conditions (active only).
     Missing optional fields return empty string / empty list rather than raising.
     """
     patient = raw.get("patient", {})
 
-    # Patient name: prefer name[0].text, fall back to given[0] + family
     patient_name = ""
     names = patient.get("name", [])
     if names:
@@ -168,7 +135,6 @@ def _parse_fhir_bundle(raw: dict[str, Any]) -> dict[str, Any]:
     dob: str = patient.get("birthDate", "")
     gender: str = patient.get("gender", "")
 
-    # Active conditions: code.coding[0].display
     conditions: list[str] = []
     for entry in raw.get("conditions", {}).get("entry", []):
         resource = entry.get("resource", {})

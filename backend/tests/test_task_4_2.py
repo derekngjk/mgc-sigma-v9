@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from app import db
 import main
 from main import app
-from auth import verify_clinician_token
+from app.dependencies import verify_clinician_token
 
 APPROVED_TEXT = "Think of the cancer cells like weeds taking over a garden."
 

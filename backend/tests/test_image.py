@@ -5,7 +5,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from image import ImageConfigError, ImageError, _make_image_prompt, generate_visual
+from app.services.images import (
+    ImageConfigError,
+    ImageError,
+    _make_image_prompt,
+    generate_visual,
+)
 from main import app
 
 

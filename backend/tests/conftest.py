@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 from main import app
-from auth import verify_clinician_token
+from app.dependencies import verify_clinician_token
 
 
 @pytest.fixture(autouse=True, scope="session")

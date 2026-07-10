@@ -31,16 +31,16 @@ from app.db import (
     upload_audio,
     upload_image,
 )
-from fhir import FHIRError, PatientNotFoundError, fetch_patient_data
-from auth import verify_clinician_token
+from app.dependencies import verify_clinician_token
+from app.services.fhir import FHIRError, PatientNotFoundError, fetch_patient_data
+from app.services.images import ImageConfigError, ImageError, generate_visual
 from app.services.llm import LLMConfigError, LLMError
 from app.services.summaries import (
     VALID_AUDIENCES,
     generate_summary,
     translate_summary,
 )
-from tts import generate_tts, split_sentences, strip_markdown
-from image import ImageConfigError, ImageError, generate_visual
+from app.services.tts import generate_tts, split_sentences, strip_markdown
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
