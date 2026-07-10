@@ -861,6 +861,50 @@ The following areas lack automated test coverage and carry regression risk:
 | `frontend/src/lib/markdown.ts` | No unit tests. Edge cases (nested bold/italic, mixed heading levels, empty input, `splitMarkdownSentences` with complex markdown) are untested. | Markdown and sentence-split regressions are invisible until a demo. |
 | Frontend integration (E2E) | No Playwright / Cypress tests. `ClinicianPage`, `FamilyPage`, and TTS playback flow are exercised only by manual testing. | A backend API contract change could silently break the UI. |
 | Auth edge cases | No tests for session expiry mid-workflow, double-tap Approve, or token refresh. | A clinician could lose work or trigger a duplicate approval if their session expires mid-flow. |
-| Translation glossary injection | The `_CLINICAL_GLOSSARY` entries in `llm.py` are present but not asserted to appear in the translation prompt string. | A refactor of `translate_summary` could silently drop the glossary without any test failing. |
+| Translation glossary injection | The `CLINICAL_GLOSSARY` entries in `app/services/prompts.py` are asserted in `test_translation.py`, but only for `zh`. | A refactor of `translate_summary` could silently drop the `ms`/`ta` glossaries without any test failing. |
 | Print window | No test for QR code SVG generation, print window DOM structure, or CJK font fallback stack. | Print regressions only surface at demo time on a real device. |
 | TTS sentence alignment | `splitMarkdownSentences` (frontend) and `split_sentences` (backend) are tested independently but not cross-validated against each other. If they diverge, the highlighted sentence index could be off by one or more during playback. | Misaligned highlighting is a demo-quality issue, not a functional bug. |
+
+---
+
+## Refactor — Backend Modularization
+
+**Files:** entire `backend/` tree — flat modules (`main.py`, `db.py`, `fhir.py`, `llm.py`, `image.py`, `tts.py`, `auth.py`, `seed_healthx.py`, `synthea_to_fhir.py`) reorganized into an `app/` package plus a `scripts/` package; every test file updated; `render.yaml`.
+
+### What was built
+
+The backend was restructured from nine flat modules into a conventional package layout without changing the API contract. All 79 pre-existing tests stayed green at every step (each of the seven steps was its own commit, re-running the suite before committing). The public HTTP surface — routes, status codes, request/response shapes — is byte-for-byte unchanged; the frontend needs no changes.
+
+```
+app/
+  main.py          create_app() factory + `app` ASGI entry
+  config.py        Settings (env, read live) + path anchors
+  schemas.py       Pydantic models + validation sets
+  dependencies.py  verify_clinician_token
+  routers/         health · clinician · family
+  services/        fhir · images · tts · summaries · prompts · llm/
+  db/              client · schema · communications · families · storage · _helpers
+scripts/           seed_healthx · synthea_to_fhir
+```
+
+### Model-agnostic LLM abstraction
+
+The former `llm._call_llm` was a single `if/elif` over `LLM_PROVIDER` that re-instantiated the vendor client and lazily imported the SDK on every call. It is replaced by `app/services/llm/`: an `LLMProvider` Protocol (`complete(prompt, max_tokens) -> str`), one class per vendor (`AnthropicProvider`, `OpenAIProvider`, `GoogleProvider`) in `providers.py`, and a `get_provider(name)` factory keyed off `settings.llm_provider`. Adding a provider is now a new class plus one registry entry. Prompt-building (`generate_summary`, `translate_summary`) moved to `services/summaries.py` and calls `llm.complete()`; the prompt/glossary/instruction constants moved verbatim to `services/prompts.py`. Model-id strings and prompt text were relocated unchanged — the abstraction is structural only, not a behavior change. Image and TTS generation keep their own smaller provider dispatch (deliberately not folded into one registry, to avoid over-abstracting a PoC).
+
+### Duplication removed
+
+**`db/_helpers.py`:** three helpers absorbed logic that was copy-pasted across the old `db.py`. `normalize_record` (flatten the joined `patients` row + JSON-encode JSONB columns) replaced three inline copies; `latest_approved_for_patient` replaced the ordered `status=Approved` query duplicated in `get_latest_approved_communication` and `get_family_summary`; `get_json_column`/`set_json_column` collapsed the four near-identical read-modify-write functions behind `translations_json` and `audio_urls_json` into two.
+
+**`routers/family.py:resolve_summary_text`:** the cache→translate→cache block was pasted into all three family-viewer handlers. It is now one helper that the two view routes and the audio route share, raising the same `LLMConfigError`/`LLMError` the routes map to 503/502.
+
+### Configuration and PEP 8
+
+**`config.py`** centralizes ~24 scattered `os.getenv` reads behind a `Settings` object whose properties read the environment live (so tests that patch `os.environ` still work), and owns the filesystem path anchors (`MOCK_DATA_DIR`, `SYNTHEA_DIR`) so modules that moved no longer resolve paths relative to their own file location. `logging.basicConfig` moved to the top of `app/main.py` (it previously sat wedged between imports); the image background task's `print()` calls became `logging` calls; `Optional[X]` was standardized to `X | None`; and a `[tool.ruff]` config was added with `ruff format` + lint applied across the tree.
+
+### Preserving the test seams
+
+The suite couples to modules by string path (`monkeypatch.setattr("llm._call_llm", ...)`, `mocker.patch("db.get_supabase")`) and by patching route-handler globals (`setattr(main, "get_family_summary", ...)`). To keep these working after the split, db submodules call `client.get_supabase()` through the `client` module object (not a bound import), so a single patch of `app.db.client.get_supabase` covers all of them; routers import their dependencies as module-level names, so patching `app.routers.family.translate_summary` (etc.) still intercepts the call. Test patch targets were repointed from `main`/`db`/`llm`/`fhir` to the specific new module that owns each seam.
+
+### Deployment change (needs human review)
+
+`render.yaml`'s start command changed from `uvicorn main:app` to `uvicorn app.main:app`. This is the only externally-visible change; there is no API path change. `rootDir: backend` and the `requirements.txt` build command are unchanged.
