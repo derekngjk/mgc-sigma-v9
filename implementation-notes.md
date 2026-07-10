@@ -391,6 +391,56 @@ The project was aligned with the Synapxe HealthX Innovation Sandbox (HX-IS) — 
 
 ---
 
+## Synapxe HealthX — Live Endpoint Go-Live
+
+**Files:** `backend/fhir.py`, `backend/.env.example`, `backend/synthea_to_fhir.py` (new), `backend/seed_healthx.py` (new), `frontend/src/pages/ClinicianPage.tsx`, `backend/tests/test_healthx_client.py` · `test_synthea_to_fhir.py` · `test_seed_healthx.py` (new)
+
+### What was built
+
+HX-IS credentials were issued, so the "live" FHIR path was moved off the placeholder from the earlier *Synapxe HealthX Sandbox Migration* section onto the **real HX-IS endpoint**, and the empty tenant was provisioned with synthetic data so the live fetch returns real resources. The mock fallback (`mock-oncology-123`) is untouched — selecting a Live patient hits the endpoint; the Mock patient stays offline.
+
+**Context:** the issued endpoint is `https://api.healthx.sg/fhir/r4b/<tenant-id>` (FHIR **R4B**, not R4), auth is a per-tenant **`x-api-key`** header (not a bearer token), and the tenant ships **empty** — resources must be POSTed/PUT before any read or search returns data. The server is a **Firely (.NET)** FHIR implementation.
+
+### FHIR endpoint decisions
+
+**Endpoint + auth corrected (supersedes the earlier migration):** `FHIR_BASE_URL` now defaults to the `api.healthx.sg/fhir/r4b/<tenant-id>` pattern and `_fetch_from_sandbox` sends `x-api-key: <HEALTHX_API_KEY>` instead of `Authorization: Bearer`. The three-call shape (Patient read + Condition/CarePlan active-filtered search) was unchanged — verified live that the Firely server honours the `patient`, `clinical-status`, and `status` search params, so `_parse_fhir_bundle` needed no changes.
+
+**Secret handling:** the real key lives only in `backend/.env` (gitignored); `.env.example` and all tracked files carry placeholders. On Render it is a dashboard env var (`sync: false`).
+
+### Data provisioning decisions
+
+**`seed_healthx.py` — idempotent PUT seeder:** the empty tenant is filled by upserting resources with deterministic IDs (PUT = update-as-create, safe to re-run) in dependency order (Patients → Conditions → CarePlans) so subject references resolve. `--dry-run` lists resources without any network call. 21 resources across 4 patients were provisioned (verified 21/21).
+
+**Both real + demo data (per product decision):** the seeder provisions the three joinable real Synapxe patients (Aaron Koh/Lim/Teo, via the converter) **and** the richer oncology narrative re-hosted from `mock_data/mock-oncology-123.json` under a **live-only ID `hx-oncology-001`** (no local fixture, so it is fetched from the endpoint rather than the mock path).
+
+**Two live-server quirks fixed during go-live:** (1) FHIR R4B requires `CarePlan.activity.detail.status` (1..1) — the oncology mock omits it and was rejected 422, so the re-host injects `"in-progress"`; (2) the API gateway rate-limits (429), so requests are throttled (0.35 s) and 429s retried with exponential backoff.
+
+### CSV → FHIR converter decisions
+
+**`synthea_to_fhir.py`:** converts the Synapxe-delivered Synthea CSVs (`SyntheticPatientRecords/`) into FHIR R4B Patient/Condition/CarePlan. The raw files are Windows-CRLF and padded with empty rows; only **Aaron Koh/Lim/Teo** have joinable Patient+Condition+CarePlan data, so an allow-list gates conversion. Dates are parsed `D/M/YYYY → YYYY-MM-DD`, SNOMED codes come from the `CODE` column, and **clinical status is faithful** — `active` only when the STOP column is empty, else `resolved`/`completed`. The reader takes a `base_dir` param so unit tests run against tmp CSVs (hermetic, no dependency on committing the data dir).
+
+**Real data is mild by nature:** faithful conversion means only Aaron Koh has an *active* condition (chronic sinusitis); Lim/Teo are historical/resolved. This is why the oncology narrative is seeded alongside — it is the rich active-condition demo. Confirmed live: Koh → 1 active condition, Teo → 0 (all resolved), `hx-oncology-001` → 2 active (breast cancer + CINV, with the resolved anaemia correctly filtered), all with `fhir_source="sandbox"`.
+
+### Frontend decisions
+
+**Selector lists live patients:** `PATIENTS` in `ClinicianPage.tsx` now offers the four provisioned Live patients plus `mock-oncology-123` (Mock); the four fixture-less mock IDs that would dead-end were removed. Labels call out Live vs Mock.
+
+### Testing decisions
+
+Unit tests are hermetic and never touch the live tenant: `test_healthx_client.py` fakes `httpx.Client` to assert the `x-api-key` header and R4B URL (keyed + keyless); `test_synthea_to_fhir.py` builds resources from tmp CSVs (status faithfulness, padding skip, date parse, missing patient); `test_seed_healthx.py` covers the mock re-host (ID/subject rewrite, required `activity.detail.status`) and PUT ordering. The live seed + fetch were verified manually with the real key; `/api/generate` and `/api/*/approve` are unchanged by this work.
+
+### Post go-live fixes and additions
+
+**502 on every live fetch — `.env` load order (`fhir.py`):** `fhir.py` read `FHIR_BASE_URL`/`HEALTHX_API_KEY` at *import* time, but `main.py` imports `fhir` **before** `llm` — and `llm.py` was the module that called `load_dotenv()`. So `fhir` froze onto the placeholder tenant URL + an empty key; every live request then failed auth upstream and surfaced as a `502`. Fix: `fhir.py` now calls `load_dotenv(find_dotenv())` at the top of the module (same as `llm.py`), so config is populated regardless of import order. Root-caused by observing `fhir.HEALTHX_API_KEY` was empty under the real `import main` order.
+
+**Dropdown UX (`ClinicianPage.tsx`):** the flat `PATIENTS` array became `PATIENT_GROUPS` rendered as `<optgroup>`s — a **Live — HealthX endpoint** group and a **Mock — offline fallback** group. This disambiguates the two "Tan Mei Ling" rows by group instead of a "(Live)/(Mock)" suffix. Patients are ordered so the default (`PATIENT_GROUPS[0].patients[0]`) has active conditions — the panel no longer opens on "None recorded" — and the resolved-only real patients (Aaron Lim/Teo) are labelled as such so their empty active list is expected.
+
+**Endocrine emergency demo patient:** added `mock_data/mock-endocrine-123.json` — **Nurul Aisyah binte Rahman** (28F), autoimmune polyglandular background (type 1 diabetes + Graves') presenting in **concurrent diabetic ketoacidosis and thyroid storm**. Four active conditions (thyroid storm `190262002`, DKA `420422005`, Graves' `353295004`, T1DM `46635009`) each SNOMED + ICD-10 coded with clinical notes, plus one resolved condition (Vitamin D deficiency) as a filter regression guard, and a dual-crisis care plan (PTU-before-iodine, hydrocortisone, beta-blockade, treat precipitant). Built as a showcase for an endocrinologist audience. It is the default selection and is fetched **live** as `hx-endocrine-001`; a Mock copy is kept for offline fallback.
+
+**Seeder generalised to multiple live mocks (`seed_healthx.py`):** `_load_oncology_bundle()` became `_rehost_mock_bundle(source, live_id)`, driven by a `MOCK_LIVE_PATIENTS` registry `[(fixture, live_id, label), …]`. `_collect_bundles()` now provisions the real Synapxe patients plus every registered mock (currently endocrine + oncology). Verified live: 28/28 resources provisioned and `hx-endocrine-001` returns its four active conditions with `fhir_source="sandbox"`.
+
+---
+
 ## Family Access Route Refactor
 
 **Files:** `backend/db.py`, `backend/main.py`, `backend/tests/test_task_4_2.py`, `backend/tests/test_family_route.py`, `frontend/src/App.tsx`, `frontend/src/pages/FamilyPage.tsx`

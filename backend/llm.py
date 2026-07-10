@@ -87,11 +87,21 @@ _CLINICAL_GLOSSARY: dict[str, dict[str, str]] = {
 VALID_AUDIENCES = {"patient", "spouse", "child", "caregiver"}
 
 _SYSTEM_PROMPT_BASE = (
-    "You are a medical communicator helping people understand complex clinical information. "
-    "Translate the clinical data provided into clear, empathetic language. "
-    "Use a relatable everyday analogy to explain the main condition. "
-    "Avoid medical jargon. Use Markdown formatting: **bold** for key terms, "
-    "## headings for sections, and - bullet points for lists where appropriate."
+    "You are a warm, plain-language health communicator writing for patients and families "
+    "who have NO medical training. Turn the clinical data into a calm, easy-to-understand note "
+    "that helps them understand what is happening and what to do.\n\n"
+    "Core rules:\n"
+    "- Write so a 12-year-old could follow it. Use short sentences and everyday words.\n"
+    "- Never leave a medical word unexplained. If you must use one, explain it right away in "
+    "plain words in brackets — e.g. 'diabetic ketoacidosis (when a lack of insulin makes the "
+    "blood dangerously acidic)'.\n"
+    "- Use ONE simple everyday analogy to explain the main problem.\n"
+    "- Clearly tell the reader what they are likely feeling or experiencing, what they should DO, "
+    "and what they should NOT do.\n"
+    "- Be honest but reassuring, never frightening. Do not include exact medication doses, lab "
+    "numbers, or codes — keep everything general and easy to act on.\n"
+    "- Use Markdown: '## ' headings for each section, **bold** for the most important points, and "
+    "'- ' bullet points for the do / don't / warning-sign lists so they are easy to scan."
 )
 
 # Audience-specific tone and framing instructions.
@@ -127,24 +137,33 @@ _AUDIENCE_INSTRUCTIONS: dict[str, str] = {
 # Length → word-count target and structural guidance injected into each prompt.
 _LENGTH_INSTRUCTIONS: dict[str, str] = {
     "short": (
-        "Length: 1-2 paragraphs, approximately 80-120 words. "
-        "Cover only: (1) the main diagnosis in plain language, "
-        "(2) the key treatment in one sentence. Omit all other detail."
+        "Length: about 90-130 words. Use exactly these '## ' sections:\n"
+        "## What is happening — the main problem in one or two plain sentences with a simple analogy, "
+        "including what the person may be feeling.\n"
+        "## What you can do — 2-3 simple, concrete actions as bullet points.\n"
+        "## When to get help — 1-2 clear warning signs that mean 'contact your care team or go to "
+        "hospital now'."
     ),
     "medium": (
-        "Length: 3-4 paragraphs, approximately 200-280 words. "
-        "Cover: (1) the main diagnosis with a brief everyday analogy, "
-        "(2) the treatment plan, (3) what the patient/family can expect next, "
-        "(4) a short supportive closing."
+        "Length: about 220-300 words. Use these '## ' sections in order:\n"
+        "## What is happening — explain the main condition(s) and what the person is likely feeling, "
+        "in plain words, with one everyday analogy.\n"
+        "## What we are doing to help — the treatment and care plan in simple terms.\n"
+        "## What you can do — 3-4 concrete self-care actions as bullet points.\n"
+        "## What to avoid — 2-3 things NOT to do, as bullet points.\n"
+        "## When to get help right away — clear warning signs (red flags) that need urgent care.\n"
+        "End with one short, warm sentence of reassurance."
     ),
     "long": (
-        "Length: 5-6 paragraphs, approximately 380-480 words. "
-        "Cover: (1) the main diagnosis with a relatable everyday analogy, "
-        "(2) detailed treatment plan and why each step matters, "
-        "(3) notable condition changes since the last report, "
-        "(4) side effects or things to watch out for, "
-        "(5) practical next steps or support resources, "
-        "(6) an empathetic closing."
+        "Length: about 380-480 words. Use these '## ' sections in order:\n"
+        "## What is happening — the condition(s) and symptoms in plain words with a relatable analogy.\n"
+        "## What has changed — ONLY if there are new or resolved conditions since the last report; "
+        "explain in plain words what the change means for them.\n"
+        "## What we are doing to help — the care plan and, briefly, why each part helps.\n"
+        "## What you can do — 4-5 concrete self-care actions as bullet points.\n"
+        "## What to avoid — 3-4 clear 'do not' points as bullet points.\n"
+        "## When to get help right away — warning signs (red flags) that need urgent care, and who to call.\n"
+        "End with a warm, encouraging closing."
     ),
 }
 

@@ -29,28 +29,53 @@ interface PatientData {
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
-const PATIENTS = [
+// Live IDs are fetched from the Synapxe HealthX FHIR R4B endpoint and must be
+// provisioned first via `backend/seed_healthx.py`. The Mock ID is served from
+// the local backend/mock_data fixture (offline fallback). Patients are ordered
+// so the default selection has active conditions (the panel won't open on
+// "None recorded"); patients whose conditions are all resolved are flagged.
+const PATIENT_GROUPS = [
   {
-    id: 'mock-oncology-123',
-    label: 'Tan Mei Ling — Breast cancer, stage III (Mock)',
+    label: 'Live — HealthX endpoint',
+    patients: [
+      {
+        id: 'hx-endocrine-001',
+        label: 'Nurul Aisyah — Thyroid storm + diabetic ketoacidosis',
+      },
+      {
+        id: 'hx-oncology-001',
+        label: 'Tan Mei Ling — Breast cancer, stage III',
+      },
+      {
+        id: '1d604da9-9a81-4ba9-80c2-de3375d59b40',
+        label: 'Aaron Koh — Chronic sinusitis',
+      },
+      {
+        id: '10339b10-3cd1-4ac3-ac13-ec26728cb592',
+        label: 'Aaron Teo — Sinusitis / bronchitis / laceration (all resolved)',
+      },
+      {
+        id: '034e9e3b-2def-4559-bb2a-7850888ae060',
+        label: 'Aaron Lim — Acute bronchitis (resolved)',
+      },
+    ],
   },
   {
-    id: 'mock-cardiology-456',
-    label: 'Lim Chong Wei — Heart failure, T2DM, hypertension (Mock)',
-  },
-  {
-    id: 'mock-pediatric-789',
-    label: 'Chen Mei Xin — Paediatric ALL, neutropenia (Mock)',
-  },
-  {
-    id: 'mock-neurology-101',
-    label: 'Priya d/o Krishnan — Relapsing-remitting MS (Mock)',
-  },
-  {
-    id: 'mock-geriatric-202',
-    label: "Goh Swee Huat — Alzheimer's, AFib, osteoporosis (Mock)",
+    label: 'Mock — offline fallback',
+    patients: [
+      {
+        id: 'mock-endocrine-123',
+        label: 'Nurul Aisyah — Thyroid storm + diabetic ketoacidosis',
+      },
+      {
+        id: 'mock-oncology-123',
+        label: 'Tan Mei Ling — Breast cancer, stage III',
+      },
+    ],
   },
 ];
+
+const DEFAULT_PATIENT_ID = PATIENT_GROUPS[0].patients[0].id;
 
 const AUDIENCE_OPTIONS = [
   { value: 'patient', label: 'Patient (self)' },
@@ -338,7 +363,7 @@ function AiDraftPanel({
 
 export default function ClinicianPage({ session }: { session: Session }) {
   const authHeader = { Authorization: `Bearer ${session.access_token}` };
-  const [selectedPatientId, setSelectedPatientId] = useState(PATIENTS[0].id);
+  const [selectedPatientId, setSelectedPatientId] = useState(DEFAULT_PATIENT_ID);
   const [stage, setStage] = useState<Stage>('idle');
   const [patient, setPatient] = useState<PatientData | null>(null);
   const [audience, setAudience] = useState('patient');
@@ -477,10 +502,14 @@ export default function ClinicianPage({ session }: { session: Session }) {
             disabled={isFetching}
             className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            {PATIENTS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
+            {PATIENT_GROUPS.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.patients.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
 
