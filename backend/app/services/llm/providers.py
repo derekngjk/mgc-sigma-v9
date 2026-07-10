@@ -1,7 +1,7 @@
 """Concrete LLMProvider implementations, one per vendor SDK."""
 
 from app.config import settings
-from app.services.llm.base import LLMConfigError
+from app.services.llm.base import LLMConfigError, LLMError
 
 ANTHROPIC_MODEL = "claude-opus-4-7"
 OPENAI_MODEL = "gpt-4o"
@@ -15,12 +15,15 @@ class AnthropicProvider:
         import anthropic
 
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        message = client.messages.create(
-            model=ANTHROPIC_MODEL,
-            max_tokens=max_tokens,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return message.content[0].text
+        try:
+            message = client.messages.create(
+                model=ANTHROPIC_MODEL,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return message.content[0].text
+        except Exception as exc:
+            raise LLMError(f"Anthropic completion failed: {exc}") from exc
 
 
 class OpenAIProvider:
@@ -30,12 +33,15 @@ class OpenAIProvider:
         import openai
 
         client = openai.OpenAI(api_key=settings.openai_api_key)
-        response = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-        )
-        return response.choices[0].message.content
+        try:
+            response = client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+            )
+            return response.choices[0].message.content
+        except Exception as exc:
+            raise LLMError(f"OpenAI completion failed: {exc}") from exc
 
 
 class GoogleProvider:
@@ -45,8 +51,11 @@ class GoogleProvider:
         from google import genai
 
         client = genai.Client(api_key=settings.gemini_api_key)
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-        )
-        return response.text
+        try:
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt,
+            )
+            return response.text
+        except Exception as exc:
+            raise LLMError(f"Google completion failed: {exc}") from exc
