@@ -1,7 +1,7 @@
 import os
 import re
 
-from llm import LLMConfigError
+from app.services.llm import LLMConfigError
 
 
 def strip_markdown(text: str) -> str:

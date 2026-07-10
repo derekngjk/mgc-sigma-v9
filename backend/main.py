@@ -33,9 +33,8 @@ from app.db import (
 )
 from fhir import FHIRError, PatientNotFoundError, fetch_patient_data
 from auth import verify_clinician_token
-from llm import (
-    LLMConfigError,
-    LLMError,
+from app.services.llm import LLMConfigError, LLMError
+from app.services.summaries import (
     VALID_AUDIENCES,
     generate_summary,
     translate_summary,

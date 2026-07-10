@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main as _main
-from llm import LLMConfigError
+from app.services.llm import LLMConfigError
 from main import app
 from tts import split_sentences, strip_markdown
 

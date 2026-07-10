@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main as _main
-from llm import LLMConfigError, LLMError
+from app.services.llm import LLMConfigError, LLMError
 from main import app
 
 ENGLISH_TEXT = "Cancer treatment is underway. The care team is here for you."

@@ -35,7 +35,7 @@ def test_generate_returns_200(
     seeded_comm_id: str,
     mock_supabase,
 ) -> None:
-    monkeypatch.setattr("llm._call_llm", lambda prompt: MOCK_SUMMARY)
+    monkeypatch.setattr("app.services.llm.complete", lambda prompt: MOCK_SUMMARY)
 
     mock_supabase.table("care_plan_translations").execute.side_effect = [
         MagicMock(
@@ -63,7 +63,7 @@ def test_generate_stores_summary_in_db(
     seeded_comm_id: str,
     mock_supabase,
 ) -> None:
-    monkeypatch.setattr("llm._call_llm", lambda prompt: MOCK_SUMMARY)
+    monkeypatch.setattr("app.services.llm.complete", lambda prompt: MOCK_SUMMARY)
 
     mock_supabase.table("care_plan_translations").execute.side_effect = [
         MagicMock(

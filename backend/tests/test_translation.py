@@ -1,9 +1,10 @@
-"""Tests for llm.translate_summary."""
+"""Tests for summaries.translate_summary."""
 
 import pytest
 
-import llm
-from llm import LLMConfigError, translate_summary
+from app.services import llm
+from app.services.llm import LLMConfigError
+from app.services.summaries import translate_summary
 
 ENGLISH_SUMMARY = (
     "Tan Mei Ling has been diagnosed with cancer. "
@@ -30,7 +31,7 @@ def test_translate_summary_unsupported_lang_raises() -> None:
 def test_translate_summary_calls_llm_and_returns_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(llm, "_call_llm", lambda prompt, **_: MOCK_TRANSLATED)
+    monkeypatch.setattr(llm, "complete", lambda prompt, **_: MOCK_TRANSLATED)
     assert translate_summary(ENGLISH_SUMMARY, "zh") == MOCK_TRANSLATED
 
 
@@ -38,7 +39,7 @@ def test_translate_summary_prompt_contains_target_language(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: list[str] = []
-    monkeypatch.setattr(llm, "_call_llm", lambda p, **_: captured.append(p) or "ok")
+    monkeypatch.setattr(llm, "complete", lambda p, **_: captured.append(p) or "ok")
 
     translate_summary(ENGLISH_SUMMARY, "zh")
     assert "Simplified Chinese" in captured[0]
@@ -54,7 +55,7 @@ def test_translate_summary_prompt_contains_source_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: list[str] = []
-    monkeypatch.setattr(llm, "_call_llm", lambda p, **_: captured.append(p) or "ok")
+    monkeypatch.setattr(llm, "complete", lambda p, **_: captured.append(p) or "ok")
     translate_summary(ENGLISH_SUMMARY, "zh")
     assert ENGLISH_SUMMARY in captured[0]
 
@@ -63,7 +64,7 @@ def test_translate_summary_prompt_contains_glossary_terms(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: list[str] = []
-    monkeypatch.setattr(llm, "_call_llm", lambda p, **_: captured.append(p) or "ok")
+    monkeypatch.setattr(llm, "complete", lambda p, **_: captured.append(p) or "ok")
     translate_summary(ENGLISH_SUMMARY, "zh")
     # Glossary entries for ZH should appear in the prompt.
     assert "化疗" in captured[0]
