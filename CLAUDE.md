@@ -38,7 +38,7 @@ mgc-sigma-v9/
 │   │   └── mock-oncology-123.json   Synthetic oncology fixture (bypasses Epic Sandbox)
 │   ├── pyproject.toml          Deps ([project] + [dependency-groups] dev), pytest + ruff config — uv-managed
 │   ├── uv.lock                 Pinned dependency lockfile (single source of truth)
-│   ├── runtime.txt             Pins Python version for Render
+│   ├── .python-version         Pins the Python version (read by uv; Render fallback)
 │   ├── .env.example            SUPABASE_URL · SUPABASE_KEY · SUPABASE_DB_URL · FHIR_BASE_URL · LLM_PROVIDER
 │   └── tests/                  pytest suite (imports the app via `app.*`; patches router/service module globals)
 │
