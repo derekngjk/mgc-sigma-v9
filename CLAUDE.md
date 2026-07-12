@@ -30,7 +30,7 @@ mgc-sigma-v9/
 │   │   ├── schemas.py          Pydantic request/response models + validation sets
 │   │   ├── dependencies.py     verify_clinician_token FastAPI dependency (Supabase Auth)
 │   │   ├── routers/            health.py · clinician.py (patient/generate/approve) · family.py (viewer/audio)
-│   │   ├── services/           fhir.py · images.py · tts.py · summaries.py · prompts.py
+│   │   ├── services/           fhir.py · images.py · image_brief.py · tts.py · summaries.py · prompts.py
 │   │   │   └── llm/            base.py (LLMProvider Protocol) · providers.py (Anthropic/OpenAI/Google) · get_provider()
 │   │   └── db/                 client.py · schema.py · communications.py · families.py · storage.py · _helpers.py
 │   ├── scripts/               Ops scripts — seed_healthx.py, synthea_to_fhir.py (run via `python -m scripts.<name>`)
