@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.image_brief import ImageBrief, ReferenceItem
 from app.services.images import (
     ImageConfigError,
     ImageError,
@@ -13,19 +14,70 @@ from app.services.images import (
     generate_visual,
 )
 
-# ── unit tests for image.py ───────────────────────────────────────────────────
+RAW_CLINICAL = json.dumps({"care_plans": {"entry": []}})
 
 
-def test_make_image_prompt_includes_condition():
-    prompt = _make_image_prompt(["invasive ductal carcinoma", "nausea"])
-    assert "invasive ductal carcinoma" in prompt
-    # Only the first two conditions are used
-    assert "nausea" in prompt
+def _sample_brief() -> ImageBrief:
+    return ImageBrief(
+        title="Your breast cancer",
+        condition_illustration=(
+            "A labeled diagram of the left breast showing a small tumor in a milk duct."
+        ),
+        labels=["Left breast: tumor in duct", "Nearby lymph nodes"],
+        reference_items=[
+            ReferenceItem(
+                category="watch", icon="thermometer", label="High fever or chills"
+            ),
+            ReferenceItem(
+                category="do",
+                icon="pill-clock",
+                label="Take anti-nausea medicine as scheduled",
+            ),
+            ReferenceItem(
+                category="dont", icon="leaf", label="Avoid raw or undercooked food"
+            ),
+        ],
+    )
 
 
-def test_make_image_prompt_no_conditions():
-    prompt = _make_image_prompt([])
-    assert "medical condition" in prompt
+# ── _make_image_prompt renders from a brief ───────────────────────────────────
+
+
+def test_make_image_prompt_renders_title_labels_and_grouped_sidebar():
+    prompt = _make_image_prompt(_sample_brief())
+    assert "Your breast cancer" in prompt
+    # Illustration is drawing guidance; short labels are the rendered anatomy text.
+    assert "small tumor in a milk duct" in prompt
+    assert "DRAWING GUIDANCE ONLY" in prompt
+    assert "Left breast: tumor in duct" in prompt
+    # Sidebar is grouped with headers, contextual icons, and item text.
+    assert "WARNING" in prompt
+    assert "Things you can do" in prompt
+    assert "Things to avoid" in prompt
+    assert "thermometer" in prompt
+    assert "Take anti-nausea medicine as scheduled" in prompt
+    assert "The ONLY text allowed in the image" in prompt
+
+
+def test_make_image_prompt_shows_only_groups_with_items():
+    brief = _sample_brief()
+    brief.reference_items = [
+        ReferenceItem(category="watch", icon="thermometer", label="High fever")
+    ]
+    prompt = _make_image_prompt(brief)
+    assert "WARNING" in prompt
+    assert "Things you can do" not in prompt
+    assert "Things to avoid" not in prompt
+
+
+def test_make_image_prompt_no_reference_items():
+    brief = ImageBrief(title="Your asthma", condition_illustration="Narrowed airways.")
+    prompt = _make_image_prompt(brief)
+    assert "Your asthma" in prompt
+    assert "REFERENCE SIDEBAR" not in prompt
+
+
+# ── generate_visual dispatch (provider logic unchanged) ───────────────────────
 
 
 def test_generate_visual_gemini_calls_nano_banana_primary(monkeypatch):
@@ -42,15 +94,13 @@ def test_generate_visual_gemini_calls_nano_banana_primary(monkeypatch):
     monkeypatch.setenv("IMAGE_PROVIDER", "gemini")
 
     with patch("google.genai.Client", return_value=fake_client):
-        result = generate_visual(
-            ["breast cancer"], "Your care summary explains the treatment plan."
-        )
+        result = generate_visual(_sample_brief())
 
     assert result == fake_png
     call_kwargs = fake_client.interactions.create.call_args.kwargs
     assert call_kwargs["model"] == "gemini-3.1-flash-image"
     assert "breast cancer" in call_kwargs["input"]
-    assert "treatment plan" in call_kwargs["input"]
+    assert "milk duct" in call_kwargs["input"]
     fake_client.models.generate_images.assert_not_called()
 
 
@@ -68,7 +118,7 @@ def test_generate_visual_gemini_falls_back_to_imagen(monkeypatch):
     monkeypatch.setenv("IMAGE_PROVIDER", "gemini")
 
     with patch("google.genai.Client", return_value=fake_client):
-        result = generate_visual(["breast cancer"])
+        result = generate_visual(_sample_brief())
 
     assert result == fake_png
     imagen_call = fake_client.models.generate_images.call_args
@@ -79,7 +129,7 @@ def test_generate_visual_missing_gemini_key_raises(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setenv("IMAGE_PROVIDER", "gemini")
     with pytest.raises(ImageConfigError, match="GEMINI_API_KEY not set"):
-        generate_visual(["some condition"])
+        generate_visual(_sample_brief())
 
 
 def test_generate_visual_both_gemini_apis_fail_raises(monkeypatch):
@@ -92,7 +142,7 @@ def test_generate_visual_both_gemini_apis_fail_raises(monkeypatch):
 
     with patch("google.genai.Client", return_value=fake_client):
         with pytest.raises(ImageError, match="Image generation failed") as exc_info:
-            generate_visual(["some condition"])
+            generate_visual(_sample_brief())
 
     msg = str(exc_info.value)
     assert "nano banana down" in msg.lower() or "Nano Banana" in msg
@@ -115,7 +165,7 @@ def test_generate_visual_openai_provider_calls_gpt_image_2(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     with patch("openai.OpenAI", return_value=fake_client):
-        result = generate_visual(["breast cancer"], "Treatment plan summary.")
+        result = generate_visual(_sample_brief())
 
     assert result == fake_png
     call_kwargs = fake_client.images.generate.call_args.kwargs
@@ -129,13 +179,13 @@ def test_generate_visual_openai_missing_key_raises(monkeypatch):
     monkeypatch.setenv("IMAGE_PROVIDER", "openai")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(ImageConfigError, match="OPENAI_API_KEY not set"):
-        generate_visual(["some condition"])
+        generate_visual(_sample_brief())
 
 
 def test_generate_visual_unknown_provider_raises(monkeypatch):
     monkeypatch.setenv("IMAGE_PROVIDER", "midjourney")
     with pytest.raises(ImageConfigError, match="Unknown IMAGE_PROVIDER"):
-        generate_visual(["some condition"])
+        generate_visual(_sample_brief())
 
 
 # ── route-level tests ─────────────────────────────────────────────────────────
@@ -166,6 +216,7 @@ def test_approve_calls_image_generation_when_flag_true(client, mock_supabase):
         "target_audience": "patient",
         "conditions_json": json.dumps(["invasive ductal carcinoma"]),
         "condition_diff": json.dumps({"added": [], "removed": [], "ongoing": []}),
+        "raw_clinical_text": RAW_CLINICAL,
         "translations_json": {},
         "audio_urls_json": {},
         "image_url": None,
@@ -192,7 +243,11 @@ def test_approve_calls_image_generation_when_flag_true(client, mock_supabase):
         )
     assert res.status_code == 200
     mock_fn.assert_called_once_with(
-        "comm-001", ["invasive ductal carcinoma"], "Your care summary."
+        "comm-001",
+        ["invasive ductal carcinoma"],
+        "Your care summary.",
+        RAW_CLINICAL,
+        "patient",
     )
 
 
@@ -207,6 +262,7 @@ def test_approve_skips_image_generation_when_flag_false(client, mock_supabase):
         "target_audience": "patient",
         "conditions_json": json.dumps(["invasive ductal carcinoma"]),
         "condition_diff": json.dumps({"added": [], "removed": [], "ongoing": []}),
+        "raw_clinical_text": RAW_CLINICAL,
         "translations_json": {},
         "audio_urls_json": {},
         "image_url": None,

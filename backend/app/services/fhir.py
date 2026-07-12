@@ -52,6 +52,7 @@ def load_mock_patient(patient_id: str = "mock-oncology-123") -> dict[str, Any]:
 def _serialise_clinical_json(raw: dict[str, Any]) -> str:
     return json.dumps(
         {
+            "gender": raw.get("patient", {}).get("gender"),
             "conditions": raw.get("conditions"),
             "care_plans": raw.get("care_plans"),
             "observations": raw.get("observations"),

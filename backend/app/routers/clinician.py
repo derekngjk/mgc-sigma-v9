@@ -29,6 +29,7 @@ from app.schemas import (
     PatientResponse,
 )
 from app.services.fhir import FHIRError, PatientNotFoundError, fetch_patient_data
+from app.services.image_brief import generate_image_brief, minimal_brief
 from app.services.images import ImageConfigError, ImageError, generate_visual
 from app.services.llm import LLMConfigError, LLMError
 from app.services.summaries import VALID_AUDIENCES, generate_summary
@@ -45,12 +46,25 @@ _AUDIENCE_MEMBER_NAMES = {
 
 
 def _generate_and_cache_image(
-    comm_id: str, conditions: list[str], summary_text: str = ""
+    comm_id: str,
+    conditions: list[str],
+    summary_text: str = "",
+    raw_clinical_text: str = "",
+    target_audience: str = "patient",
 ) -> None:
     """Generate a visual aid and cache its URL. Failures are logged, not raised."""
     logger.info("generating image for %s, conditions=%s", comm_id, conditions)
     try:
-        image_bytes = generate_visual(conditions, summary_text)
+        try:
+            brief = generate_image_brief(
+                conditions, target_audience, summary_text, raw_clinical_text
+            )
+        except LLMError as exc:
+            logger.warning(
+                "image brief failed for %s, using minimal brief: %s", comm_id, exc
+            )
+            brief = minimal_brief(conditions, target_audience)
+        image_bytes = generate_visual(brief)
         url = upload_image(comm_id, image_bytes)
         set_image_url(comm_id, url)
         logger.info("image ready for %s: %s", comm_id, url)
@@ -176,7 +190,11 @@ def approve_communication(
     if req.generate_image:
         conditions = json.loads(updated.get("conditions_json") or "[]")
         summary_text = updated.get("ai_summary_text") or ""
-        _generate_and_cache_image(comm_id, conditions, summary_text)
+        raw_clinical_text = updated.get("raw_clinical_text") or ""
+        target_audience = updated.get("target_audience", "patient")
+        _generate_and_cache_image(
+            comm_id, conditions, summary_text, raw_clinical_text, target_audience
+        )
 
     return ApproveResponse(
         id=comm_id,
