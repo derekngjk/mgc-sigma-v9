@@ -25,28 +25,68 @@ class ImageError(Exception):
 
 
 def _make_image_prompt(conditions: list[str], summary_text: str = "") -> str:
-    """Build a specific, labeled educational diagram prompt from conditions and summary."""
+    """Build a structured, brief-style prompt for gpt-image-2 / Nano Banana.
+
+    Follows OpenAI's image-generation prompting guide (labeled sections rather
+    than one long paragraph, quoted label text for reliable in-image rendering,
+    explicit exclude list). The same structure works well for Nano Banana.
+
+    Content is strictly grounded in the inputs: the illustration may only depict
+    or label facts present in the conditions list and the written summary. The
+    amount of detail scales with the length/richness of the summary — a short
+    summary yields a sparse image, a detailed summary a denser one.
+    """
     primary = conditions[0] if conditions else "the patient's medical condition"
-    all_conds = (
-        " and ".join(conditions[:3])
-        if conditions
-        else "the patient's medical condition"
-    )
+    secondary = conditions[1:3]
 
-    context_snippet = ""
+    secondary_line = ""
+    if secondary:
+        secondary_line = (
+            "Additional conditions from the same care record: "
+            + ", ".join(f'"{c}"' for c in secondary)
+            + ". Only depict or label these if the written summary below actually discusses them; otherwise ignore them."
+        )
+
+    # Embed the full summary verbatim as the factual source. Strip inline
+    # markdown syntax; keep hyphens so compound words like "relapsing-remitting"
+    # survive. List/blockquote markers at line start are handled separately.
     if summary_text:
-        clean = re.sub(r"[#*_`>\-]", "", summary_text).strip()
-        clean = " ".join(clean.split())[:200]
-        context_snippet = f' Context from the patient summary: "{clean}..."'
+        clean = re.sub(r"[#*_`>]", "", summary_text)
+        clean = re.sub(r"(?m)^\s*-\s+", "", clean).strip()
+        clean = " ".join(clean.split())
+        source_line = (
+            "Source content — this is the ONLY factual material to illustrate:\n"
+            f'"""\n{clean}\n"""\n'
+            "Every symptom, body region, medication, treatment step, care-team action, patient action, or clinical concept that appears in the image must be directly traceable to a phrase or idea in the text above. "
+            "Do NOT introduce clinical detail that is not present in the text — no invented symptoms, no assumed treatments, no generic patient-education content added to fill space. "
+            "Let the amount of detail follow the source: a brief summary → a sparse layout with only the elements it mentions; a detailed summary → a richer layout with more callouts. "
+            "If the source is silent on a topic (body region, symptoms, treatment plan, etc.), the image must be silent on that topic too."
+        )
+    else:
+        source_line = (
+            "No written summary was provided. Keep the image minimal: a clear title label naming the condition and a simple, generic depiction of the concept. "
+            "Do NOT invent symptoms, treatments, body regions, medications, or care actions."
+        )
 
-    return (
-        f"An informative, labeled medical illustration for a patient education document about {all_conds}.{context_snippet} "
-        f"Style: clean educational diagram with a soft, reassuring colour palette (pale blues, warm ambers, sage greens). "
-        f"Include clear text labels and callout lines identifying the key anatomical structures or treatment concepts "
-        f"relevant to {primary}. Labels should name the specific condition, affected body area, or treatment step. "
-        "Layout: professional medical infographic — approachable and clear, not graphic or alarming. "
-        "Light background. Suitable for a hospital patient information leaflet."
-    )
+    sections = [
+        f'Audience: an adult patient or family member reading a friendly care summary about "{primary}".',
+        "Goal: a supportive, calming illustration that reflects only what the written summary describes. Not a clinical anatomical chart, not a diagnostic diagram.",
+        "Format: 1024×1024 square, flat-vector medical infographic on a light background, with enough breathing room around each labeled element that every label is comfortably legible.",
+        source_line,
+        (
+            "Rendered text and layout:\n"
+            f'  - Include a clear title label naming the condition (for example "{primary}").\n'
+            "  - Add a plain-language subtitle only if the summary provides one; otherwise omit it.\n"
+            "  - Use callouts — each connected by a thin line to the part of the illustration it describes — only for concepts the summary actually covers. Prefer short descriptive phrases over single-word labels when a phrase communicates the idea more clearly.\n"
+            "  - A reader who only glances at the image should come away with an accurate, self-contained understanding of what the summary says — no more, no less."
+        ),
+        secondary_line,
+        "Colour palette: soft and reassuring — pale blues, warm ambers, sage greens. Avoid saturated reds and dark, ominous tones.",
+        "Style keywords: flat illustration, consistent line weight, rounded shapes, subtle gradients, patient-education leaflet aesthetic, clear arrows and callout lines.",
+        "Do NOT include: photorealistic bodies, wounds, blood, tears or distressed faces, medical instruments in use, long sentences or paragraphs of body text, watermarks, brand logos, unrelated icons, alarming red accents.",
+    ]
+
+    return "\n\n".join(s for s in sections if s)
 
 
 def _generate_via_gemini(prompt: str) -> bytes:
