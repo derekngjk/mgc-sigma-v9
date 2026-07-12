@@ -16,30 +16,60 @@ export function splitMarkdownSentences(text: string): string[] {
   return result;
 }
 
+// Line-based so blocks separate on a heading / list / blank-line boundary, not only
+// on blank lines — some LLMs emit valid but tightly-spaced markdown (no blank line
+// between a heading and the list under it) that a blank-line-only split mis-groups.
 export function markdownToHtml(text: string): string {
-  const blocks = text.split('\n\n').filter(Boolean);
-  return blocks
-    .map((block) => {
-      const trimmed = block.trim();
+  const blocks: string[] = [];
+  let paragraph: string[] = [];
+  let items: string[] = [];
 
-      const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)$/s);
-      if (headingMatch) {
-        const level = headingMatch[1].length;
-        return `<h${level}>${inlineToHtml(headingMatch[2])}</h${level}>`;
-      }
+  const flushParagraph = (): void => {
+    if (paragraph.length) {
+      blocks.push(`<p>${paragraph.map(inlineToHtml).join('<br/>')}</p>`);
+      paragraph = [];
+    }
+  };
+  const flushList = (): void => {
+    if (items.length) {
+      const lis = items.map((item) => `<li>${inlineToHtml(item)}</li>`).join('');
+      blocks.push(`<ul>${lis}</ul>`);
+      items = [];
+    }
+  };
+  const flush = (): void => {
+    flushParagraph();
+    flushList();
+  };
 
-      if (/^[-*+]\s+/m.test(trimmed)) {
-        const lis = trimmed
-          .split('\n')
-          .filter(Boolean)
-          .map((item) => `<li>${inlineToHtml(item.replace(/^[-*+]\s+/, ''))}</li>`)
-          .join('');
-        return `<ul>${lis}</ul>`;
-      }
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) {
+      flush();
+      continue;
+    }
 
-      return `<p>${inlineToHtml(trimmed.replace(/\n/g, '<br/>'))}</p>`;
-    })
-    .join('\n');
+    const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
+    if (headingMatch) {
+      flush();
+      const level = headingMatch[1].length;
+      blocks.push(`<h${level}>${inlineToHtml(headingMatch[2])}</h${level}>`);
+      continue;
+    }
+
+    const listMatch = line.match(/^[-*+]\s+(.+)$/);
+    if (listMatch) {
+      flushParagraph();
+      items.push(listMatch[1]);
+      continue;
+    }
+
+    flushList();
+    paragraph.push(line);
+  }
+
+  flush();
+  return blocks.join('\n');
 }
 
 // Inlined print trigger is more reliable than cross-window load events.
