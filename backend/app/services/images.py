@@ -1,10 +1,10 @@
-"""Educational visual-aid generation, dispatching on IMAGE_PROVIDER."""
+"""Educational visual-aid generation — renders a structured ImageBrief, dispatching on IMAGE_PROVIDER."""
 
 import base64
 import logging
-import re
 
 from app.config import settings
+from app.services.image_brief import ImageBrief
 
 logger = logging.getLogger(__name__)
 
@@ -24,67 +24,74 @@ class ImageError(Exception):
     pass
 
 
-def _make_image_prompt(conditions: list[str], summary_text: str = "") -> str:
-    """Build a structured, brief-style prompt for gpt-image-2 / Nano Banana.
+def _make_image_prompt(brief: ImageBrief) -> str:
+    """Render a patient-education infographic prompt from a structured image brief.
 
-    Follows OpenAI's image-generation prompting guide (labeled sections rather
-    than one long paragraph, quoted label text for reliable in-image rendering,
-    explicit exclude list). The same structure works well for Nano Banana.
-
-    Content is strictly grounded in the inputs: the illustration may only depict
-    or label facts present in the conditions list and the written summary. The
-    amount of detail scales with the length/richness of the summary — a short
-    summary yields a sparse image, a detailed summary a denser one.
+    The brief is already grounded, audience-correct, and dose-free, so this is a pure
+    rendering spec — the image model illustrates exactly what the brief specifies.
     """
-    primary = conditions[0] if conditions else "the patient's medical condition"
-    secondary = conditions[1:3]
-
-    secondary_line = ""
-    if secondary:
-        secondary_line = (
-            "Additional conditions from the same care record: "
-            + ", ".join(f'"{c}"' for c in secondary)
-            + ". Only depict or label these if the written summary below actually discusses them; otherwise ignore them."
-        )
-
-    # Embed the full summary verbatim as the factual source. Strip inline
-    # markdown syntax; keep hyphens so compound words like "relapsing-remitting"
-    # survive. List/blockquote markers at line start are handled separately.
-    if summary_text:
-        clean = re.sub(r"[#*_`>]", "", summary_text)
-        clean = re.sub(r"(?m)^\s*-\s+", "", clean).strip()
-        clean = " ".join(clean.split())
-        source_line = (
-            "Source content — this is the ONLY factual material to illustrate:\n"
-            f'"""\n{clean}\n"""\n'
-            "Every symptom, body region, medication, treatment step, care-team action, patient action, or clinical concept that appears in the image must be directly traceable to a phrase or idea in the text above. "
-            "Do NOT introduce clinical detail that is not present in the text — no invented symptoms, no assumed treatments, no generic patient-education content added to fill space. "
-            "Let the amount of detail follow the source: a brief summary → a sparse layout with only the elements it mentions; a detailed summary → a richer layout with more callouts. "
-            "If the source is silent on a topic (body region, symptoms, treatment plan, etc.), the image must be silent on that topic too."
-        )
-    else:
-        source_line = (
-            "No written summary was provided. Keep the image minimal: a clear title label naming the condition and a simple, generic depiction of the concept. "
-            "Do NOT invent symptoms, treatments, body regions, medications, or care actions."
-        )
-
-    sections = [
-        f'Audience: an adult patient or family member reading a friendly care summary about "{primary}".',
-        "Goal: a supportive, calming illustration that reflects only what the written summary describes. Not a clinical anatomical chart, not a diagnostic diagram.",
-        "Format: 1024×1024 square, flat-vector medical infographic on a light background, with enough breathing room around each labeled element that every label is comfortably legible.",
-        source_line,
-        (
-            "Rendered text and layout:\n"
-            f'  - Include a clear title label naming the condition (for example "{primary}").\n'
-            "  - Add a plain-language subtitle only if the summary provides one; otherwise omit it.\n"
-            "  - Use callouts — each connected by a thin line to the part of the illustration it describes — only for concepts the summary actually covers. Prefer short descriptive phrases over single-word labels when a phrase communicates the idea more clearly.\n"
-            "  - A reader who only glances at the image should come away with an accurate, self-contained understanding of what the summary says — no more, no less."
-        ),
-        secondary_line,
-        "Colour palette: soft and reassuring — pale blues, warm ambers, sage greens. Avoid saturated reds and dark, ominous tones.",
-        "Style keywords: flat illustration, consistent line weight, rounded shapes, subtle gradients, patient-education leaflet aesthetic, clear arrows and callout lines.",
-        "Do NOT include: photorealistic bodies, wounds, blood, tears or distressed faces, medical instruments in use, long sentences or paragraphs of body text, watermarks, brand logos, unrelated icons, alarming red accents.",
+    main_lines = [
+        "Layout — two zones:",
+        "  - MAIN (centered, ~60% of the canvas): illustrate the scene described here. This "
+        "description is DRAWING GUIDANCE ONLY — do NOT write these sentences anywhere in the "
+        "image.",
+        f"    Scene to draw: {brief.condition_illustration}",
+        f'    Title label (render verbatim, large, across the top): "{brief.title}".',
     ]
+    if brief.labels:
+        label_list = ", ".join(f'"{label}"' for label in brief.labels)
+        main_lines.append(
+            "    Label the drawn parts with ONLY these short callouts, each rendered verbatim "
+            f"and joined by a thin line to the part it names: {label_list}."
+        )
+
+    sections: list[str] = [
+        "This is a patient-education infographic — a calm, supportive visual, not a "
+        "clinical anatomical chart or diagnostic diagram.",
+        "Format: 1024x1024 square, flat-vector illustration on a light background, with "
+        "generous whitespace so every label is comfortably legible.",
+        "\n".join(main_lines),
+    ]
+
+    groups = (
+        ("watch", "WARNING", "Get help right away", "soft red"),
+        ("do", "DO", "Things you can do", "soft green"),
+        ("dont", "DON'T", "Things to avoid", "soft amber"),
+    )
+    group_blocks: list[str] = []
+    for category, header, subtitle, tint in groups:
+        items = [i for i in brief.reference_items if i.category == category]
+        if not items:
+            continue
+        rows = "\n".join(f'      - {i.icon} icon + "{i.label}"' for i in items)
+        group_blocks.append(
+            f'  {header} card ({tint} tint): a bold "{header}" header with the subtitle '
+            f'"{subtitle}", then these rows, each a small contextual icon beside its short '
+            f"text:\n{rows}"
+        )
+    if group_blocks:
+        sections.append(
+            "REFERENCE SIDEBAR (right column, ~35% of the canvas): stacked, clearly separated "
+            "rounded cards — one per group below, in this order. Render only the groups "
+            "listed:\n" + "\n".join(group_blocks)
+        )
+
+    sections.append(
+        "The ONLY text allowed in the image is: the title, the short part labels, and the "
+        "sidebar headers, subtitles, and item labels listed above. Do NOT render the scene "
+        "description or any other sentences as image text. Put label text in quotes; keep it "
+        "legible; avoid tiny text."
+    )
+    sections.append(
+        "Style: clean, flat visual system with a consistent icon style, clear thin callout "
+        "lines, rounded shapes, and readable labels. Colour palette: soft and reassuring — "
+        "pale blues, warm ambers, sage greens; avoid saturated reds and dark, ominous tones."
+    )
+    sections.append(
+        "Do NOT include: photorealistic bodies, wounds, blood, tears or distressed faces, "
+        "medical instruments in use, numeric doses/units/lab values, long sentences or dense "
+        "body text, watermarks, brand logos, unrelated icons, or alarming red accents."
+    )
 
     return "\n\n".join(s for s in sections if s)
 
@@ -154,16 +161,14 @@ def _generate_via_openai(prompt: str) -> bytes:
         raise ImageError(f"Image generation failed. OpenAI: {exc}") from exc
 
 
-def generate_visual(conditions: list[str], summary_text: str = "") -> bytes:
-    """Generate a supportive illustration as PNG bytes, dispatching on IMAGE_PROVIDER.
+def generate_visual(brief: ImageBrief) -> bytes:
+    """Generate a supportive illustration as PNG bytes from a brief, dispatching on IMAGE_PROVIDER.
 
     Raises ImageConfigError on missing keys / unknown provider, ImageError on API failure.
     """
     provider = settings.image_provider.lower()
-    logger.info(
-        "generate_visual: provider=%s, %d conditions", provider, len(conditions)
-    )
-    prompt = _make_image_prompt(conditions, summary_text)
+    logger.info("generate_visual: provider=%s, title=%r", provider, brief.title)
+    prompt = _make_image_prompt(brief)
     logger.debug("image prompt: %s", prompt)
 
     if provider == "gemini":
