@@ -33,13 +33,14 @@ def seeded_comm_id(mock_supabase) -> str:
     )
 
 
-def test_approve_returns_200(
+def test_approve_delivers_to_account(
     client: TestClient, seeded_comm_id: str, mock_supabase
 ) -> None:
-    # side_effect on care_plan_translations table
-    # Entry 1: consumed by first get_communication (pre-update existence check)
-    # Entry 2: consumed by update_communication's .update().eq().execute() — same table mock
-    # Entry 3: consumed by second get_communication (post-update read for approved_at + patient_id)
+    # care_plan_translations.execute is shared across the chained calls, consumed in order:
+    #   1: first get_communication (pre-update existence check)
+    #   2: update_communication's .update().eq().execute()
+    #   3: second get_communication (post-update read for approved_at + patient_id)
+    #   4: set_delivered's .update().eq().execute()
     mock_supabase.table("care_plan_translations").select().eq().execute.side_effect = [
         MagicMock(data=[{"id": seeded_comm_id, "status": "Draft", "patients": {}}]),
         MagicMock(data=[{"id": seeded_comm_id}]),
@@ -57,7 +58,12 @@ def test_approve_returns_200(
                 }
             ]
         ),
+        MagicMock(data=[{"id": seeded_comm_id}]),
     ]
+    # patient_has_identity → the patient has a login hash, so delivery succeeds.
+    mock_supabase.table("patients").select().eq().execute.return_value = MagicMock(
+        data=[{"identity_hash": "abc123"}]
+    )
 
     resp = client.post(
         f"/api/communications/{seeded_comm_id}/approve",
@@ -66,8 +72,9 @@ def test_approve_returns_200(
     assert resp.status_code == 200
     body = resp.json()
     assert body["id"] == seeded_comm_id
-    assert "/family/" in body["family_link"]
-    assert "/member/" in body["family_link"]
+    assert body["patient_name"] == "Tan Mei Ling"
+    assert body["delivered"] is True
+    assert "family_link" not in body
 
 
 def test_approve_stores_clinician_id(
@@ -96,7 +103,11 @@ def test_approve_stores_clinician_id(
                 }
             ]
         ),
+        MagicMock(data=[{"id": seeded_comm_id}]),
     ]
+    mock_supabase.table("patients").select().eq().execute.return_value = MagicMock(
+        data=[{"identity_hash": "abc123"}]
+    )
 
     patched = mocker.patch(
         "app.routers.clinician.update_communication",

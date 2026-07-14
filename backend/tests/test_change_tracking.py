@@ -19,6 +19,7 @@ def _make_mock_fhir(conditions: list[str]) -> dict:
         "patient_name": "Elena Vasquez",
         "dob": "1980-01-01",
         "gender": "female",
+        "nric": "S1234567A",
         "conditions": conditions,
         "raw_fhir_json": json.dumps({"conditions": conditions}),
         "fhir_source": "mock",

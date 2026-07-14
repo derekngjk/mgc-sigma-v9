@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.dependencies import verify_clinician_token
+from app.dependencies import verify_clinician_token, verify_patient_token
 from app.main import app
 
 
@@ -16,11 +16,12 @@ def mock_db_init():
 
 @pytest.fixture(autouse=True, scope="session")
 def override_auth():
-    """Bypass JWT verification for all tests."""
+    """Bypass clinician + patient token verification for all tests."""
     app.dependency_overrides[verify_clinician_token] = lambda: {
         "id": "test-user-id",
         "sub": "test-user",
     }
+    app.dependency_overrides[verify_patient_token] = lambda: "test-portal-user-id"
     yield
     app.dependency_overrides.clear()
 

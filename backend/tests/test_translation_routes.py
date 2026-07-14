@@ -1,11 +1,11 @@
-"""Tests for the ?lang= query param on GET /api/family/{fid}/member/{mid}
-and the legacy GET /api/communications/{id} endpoint."""
+"""Tests for the ?lang= query param on GET /api/account/reports/{comm_id}."""
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.routers import family
+from app.routers import account
+from app.services import summaries
 from app.services.llm import LLMConfigError, LLMError
 
 ENGLISH_TEXT = "Cancer treatment is underway. The care team is here for you."
@@ -18,10 +18,7 @@ APPROVED_RECORD = {
     "ai_summary_text": ENGLISH_TEXT,
     "approved_at": "2024-01-01T00:00:00+00:00",
     "condition_diff": '{"added": [], "removed": [], "ongoing": ["Breast cancer"]}',
-    "patients": {
-        "patient_name": "Tan Mei Ling",
-        "epic_patient_id": "mock-oncology-123",
-    },
+    "image_url": None,
 }
 
 
@@ -31,117 +28,90 @@ def client() -> TestClient:
         yield c
 
 
-# ── /api/family/{fid}/member/{mid} ────────────────────────────────────────────
-
-
 @pytest.fixture(autouse=True)
-def stub_get_family_summary(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(family, "get_family_summary", lambda fid, mid: APPROVED_RECORD)
-    monkeypatch.setattr(family, "get_image_url", lambda cid: None)
+def stub_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        account, "get_portal_user", lambda uid: {"role": "patient", "patient_id": "p1"}
+    )
+    monkeypatch.setattr(
+        account,
+        "get_role_report_for_user",
+        lambda comm_id, patient_id, role: APPROVED_RECORD,
+    )
+    monkeypatch.setattr(account, "mark_report_read", lambda uid, comm_id: None)
 
 
-def test_family_member_default_lang_returns_english(client: TestClient) -> None:
-    resp = client.get("/api/family/fid-1/member/mid-1")
+def test_default_lang_returns_english(client: TestClient) -> None:
+    resp = client.get("/api/account/reports/comm-001")
     assert resp.status_code == 200
     assert resp.json()["ai_summary_text"] == ENGLISH_TEXT
 
 
-def test_family_member_lang_en_returns_english(client: TestClient) -> None:
-    resp = client.get("/api/family/fid-1/member/mid-1?lang=en")
+def test_lang_en_returns_english(client: TestClient) -> None:
+    resp = client.get("/api/account/reports/comm-001?lang=en")
     assert resp.status_code == 200
     assert resp.json()["ai_summary_text"] == ENGLISH_TEXT
 
 
-def test_family_member_invalid_lang_returns_400(client: TestClient) -> None:
-    resp = client.get("/api/family/fid-1/member/mid-1?lang=fr")
+def test_invalid_lang_returns_400(client: TestClient) -> None:
+    resp = client.get("/api/account/reports/comm-001?lang=fr")
     assert resp.status_code == 400
 
 
-def test_family_member_cache_hit_returns_cached_text(
+def test_cache_hit_returns_cached_text(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(family, "get_translation", lambda comm_id, lang: ZH_TEXT)
-    translate_called = []
+    monkeypatch.setattr(summaries, "get_translation", lambda comm_id, lang: ZH_TEXT)
+    translate_called: list[int] = []
     monkeypatch.setattr(
-        family, "translate_summary", lambda t, _lang: translate_called.append(1) or ""
+        summaries, "translate_summary", lambda t, _lang: translate_called.append(1) or ""
     )
 
-    resp = client.get("/api/family/fid-1/member/mid-1?lang=zh")
+    resp = client.get("/api/account/reports/comm-001?lang=zh")
     assert resp.status_code == 200
     assert resp.json()["ai_summary_text"] == ZH_TEXT
     assert not translate_called
 
 
-def test_family_member_cache_miss_translates_and_caches(
+def test_cache_miss_translates_and_caches(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(family, "get_translation", lambda comm_id, lang: None)
-    monkeypatch.setattr(family, "translate_summary", lambda text, lang: ZH_TEXT)
+    monkeypatch.setattr(summaries, "get_translation", lambda comm_id, lang: None)
+    monkeypatch.setattr(summaries, "translate_summary", lambda text, lang: ZH_TEXT)
     set_calls: list[tuple] = []
     monkeypatch.setattr(
-        family, "set_translation", lambda c, lg, t: set_calls.append((c, lg, t))
+        summaries, "set_translation", lambda c, lg, t: set_calls.append((c, lg, t))
     )
 
-    resp = client.get("/api/family/fid-1/member/mid-1?lang=zh")
+    resp = client.get("/api/account/reports/comm-001?lang=zh")
     assert resp.status_code == 200
     assert resp.json()["ai_summary_text"] == ZH_TEXT
     assert set_calls == [("comm-001", "zh", ZH_TEXT)]
 
 
-def test_family_member_translate_llm_error_returns_502(
+def test_translate_llm_error_returns_502(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(family, "get_translation", lambda comm_id, lang: None)
+    monkeypatch.setattr(summaries, "get_translation", lambda comm_id, lang: None)
     monkeypatch.setattr(
-        family,
+        summaries,
         "translate_summary",
         lambda t, _lang: (_ for _ in ()).throw(LLMError("upstream failed")),
     )
 
-    resp = client.get("/api/family/fid-1/member/mid-1?lang=ms")
+    resp = client.get("/api/account/reports/comm-001?lang=ms")
     assert resp.status_code == 502
 
 
-def test_family_member_translate_config_error_returns_503(
+def test_translate_config_error_returns_503(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(family, "get_translation", lambda comm_id, lang: None)
+    monkeypatch.setattr(summaries, "get_translation", lambda comm_id, lang: None)
     monkeypatch.setattr(
-        family,
+        summaries,
         "translate_summary",
         lambda t, _lang: (_ for _ in ()).throw(LLMConfigError("key missing")),
     )
 
-    resp = client.get("/api/family/fid-1/member/mid-1?lang=ta")
+    resp = client.get("/api/account/reports/comm-001?lang=ta")
     assert resp.status_code == 503
-
-
-# ── /api/communications/{id} (legacy endpoint) ───────────────────────────────
-
-
-@pytest.fixture
-def stub_get_communication(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(family, "get_communication", lambda comm_id: APPROVED_RECORD)
-
-
-def test_legacy_endpoint_cache_miss_translates(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, stub_get_communication: None
-) -> None:
-    monkeypatch.setattr(family, "get_translation", lambda comm_id, lang: None)
-    monkeypatch.setattr(family, "translate_summary", lambda text, lang: ZH_TEXT)
-    set_calls: list[tuple] = []
-    monkeypatch.setattr(
-        family, "set_translation", lambda c, lg, t: set_calls.append((c, lg, t))
-    )
-
-    resp = client.get("/api/communications/comm-001?lang=zh")
-    assert resp.status_code == 200
-    assert resp.json()["ai_summary_text"] == ZH_TEXT
-    assert set_calls == [("comm-001", "zh", ZH_TEXT)]
-
-
-def test_legacy_endpoint_invalid_lang_returns_400(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch, stub_get_communication: None
-) -> None:
-    resp = client.get("/api/communications/comm-001?lang=jp")
-    assert resp.status_code == 400

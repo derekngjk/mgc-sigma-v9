@@ -225,13 +225,10 @@ def test_approve_calls_image_generation_when_flag_true(client, mock_supabase):
         MagicMock(data=[comm_record]),  # get_communication (pre-update check)
         MagicMock(data=[comm_record]),  # update_communication
         MagicMock(data=[comm_record]),  # get_communication (post-update read)
+        MagicMock(data=[comm_record]),  # set_delivered
     ]
-    mock_supabase.table("patients").execute.return_value = MagicMock(data=[])
-    mock_supabase.table("families").execute.return_value = MagicMock(
-        data=[{"id": "fam-uuid"}]
-    )
-    mock_supabase.table("family_members").execute.return_value = MagicMock(
-        data=[{"id": "mem-uuid"}]
+    mock_supabase.table("patients").execute.return_value = MagicMock(
+        data=[{"identity_hash": "abc123"}]
     )
 
     from app.routers import clinician as main_module
@@ -271,12 +268,10 @@ def test_approve_skips_image_generation_when_flag_false(client, mock_supabase):
         MagicMock(data=[comm_record]),
         MagicMock(data=[comm_record]),
         MagicMock(data=[comm_record]),
+        MagicMock(data=[comm_record]),  # set_delivered
     ]
-    mock_supabase.table("families").execute.return_value = MagicMock(
-        data=[{"id": "fam-uuid"}]
-    )
-    mock_supabase.table("family_members").execute.return_value = MagicMock(
-        data=[{"id": "mem-uuid"}]
+    mock_supabase.table("patients").execute.return_value = MagicMock(
+        data=[{"identity_hash": "abc123"}]
     )
 
     from app.routers import clinician as main_module

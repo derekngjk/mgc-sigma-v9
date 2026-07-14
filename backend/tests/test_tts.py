@@ -1,10 +1,10 @@
-"""Tests for TTS generation (tts.py) and GET /api/family/{fid}/member/{mid}/audio."""
+"""Tests for TTS generation (tts.py) and GET /api/account/reports/{comm_id}/audio."""
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.routers import family
+from app.routers import account
 from app.services.llm import LLMConfigError
 from app.services.tts import split_sentences, strip_markdown
 
@@ -110,7 +110,7 @@ def test_generate_tts_missing_key_raises(monkeypatch: pytest.MonkeyPatch) -> Non
         real_generate_tts("Hello world")
 
 
-# ── endpoint tests: GET /api/family/{fid}/member/{mid}/audio ─────────────────
+# ── endpoint tests: GET /api/account/reports/{comm_id}/audio ─────────────────
 
 
 @pytest.fixture
@@ -120,33 +120,42 @@ def client() -> TestClient:
 
 
 @pytest.fixture(autouse=True)
-def stub_family_summary(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(family, "get_family_summary", lambda fid, mid: APPROVED_RECORD)
+def stub_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        account, "get_portal_user", lambda uid: {"role": "patient", "patient_id": "p1"}
+    )
+    monkeypatch.setattr(
+        account,
+        "get_role_report_for_user",
+        lambda comm_id, patient_id, role: APPROVED_RECORD,
+    )
 
 
 def test_audio_endpoint_invalid_lang(client: TestClient) -> None:
-    resp = client.get("/api/family/fid-1/member/mid-1/audio?lang=fr")
+    resp = client.get("/api/account/reports/comm-001/audio?lang=fr")
     assert resp.status_code == 400
 
 
-def test_audio_endpoint_invalid_fid_mid(
+def test_audio_endpoint_report_not_found(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(family, "get_family_summary", lambda fid, mid: None)
-    resp = client.get("/api/family/bad-fid/member/bad-mid/audio?lang=en")
+    monkeypatch.setattr(
+        account, "get_role_report_for_user", lambda comm_id, pid, role: None
+    )
+    resp = client.get("/api/account/reports/other-comm/audio?lang=en")
     assert resp.status_code == 404
 
 
 def test_audio_endpoint_cache_hit_skips_generation(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(family, "get_audio_url", lambda comm_id, lang: AUDIO_URL)
+    monkeypatch.setattr(account, "get_audio_url", lambda comm_id, lang: AUDIO_URL)
     generate_called: list[bool] = []
     monkeypatch.setattr(
-        family, "generate_tts", lambda text: generate_called.append(True) or b""
+        account, "generate_tts", lambda text: generate_called.append(True) or b""
     )
 
-    resp = client.get("/api/family/fid-1/member/mid-1/audio?lang=en")
+    resp = client.get("/api/account/reports/comm-001/audio?lang=en")
     assert resp.status_code == 200
     body = resp.json()
     assert body["url"] == AUDIO_URL
@@ -158,15 +167,15 @@ def test_audio_endpoint_cache_hit_skips_generation(
 def test_audio_endpoint_cache_miss_generates_and_caches(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(family, "get_audio_url", lambda comm_id, lang: None)
-    monkeypatch.setattr(family, "generate_tts", lambda text: FAKE_MP3)
-    monkeypatch.setattr(family, "upload_audio", lambda comm_id, lang, data: AUDIO_URL)
+    monkeypatch.setattr(account, "get_audio_url", lambda comm_id, lang: None)
+    monkeypatch.setattr(account, "generate_tts", lambda text: FAKE_MP3)
+    monkeypatch.setattr(account, "upload_audio", lambda comm_id, lang, data: AUDIO_URL)
     set_calls: list[tuple] = []
     monkeypatch.setattr(
-        family, "set_audio_url", lambda c, lg, u: set_calls.append((c, lg, u))
+        account, "set_audio_url", lambda c, lg, u: set_calls.append((c, lg, u))
     )
 
-    resp = client.get("/api/family/fid-1/member/mid-1/audio?lang=en")
+    resp = client.get("/api/account/reports/comm-001/audio?lang=en")
     assert resp.status_code == 200
     body = resp.json()
     assert body["url"] == AUDIO_URL
