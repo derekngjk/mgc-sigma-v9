@@ -6,14 +6,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.config import settings
 from app.db import (
     create_communication,
-    create_family_member,
     get_communication,
     get_latest_approved_communication,
-    get_or_create_family,
-    get_or_create_primary_member,
+    patient_has_identity,
+    set_delivered,
     set_image_url,
     update_communication,
     upload_image,
@@ -39,12 +37,6 @@ from app.services.summaries import VALID_AUDIENCES, generate_summary
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-_AUDIENCE_MEMBER_NAMES = {
-    "spouse": "Spouse / Partner",
-    "child": "Adult Child",
-    "caregiver": "Caregiver",
-}
 
 
 def _generate_and_cache_image(
@@ -110,6 +102,7 @@ def get_patient(
         target_audience="family",
         conditions_json=json.dumps(data["conditions"]),
         condition_diff=diff.model_dump_json(),
+        nric=data["nric"],
     )
 
     return PatientResponse(
@@ -192,15 +185,11 @@ def approve_communication(
         approved_by_user_id=user.get("id", ""),
     )
     updated = get_communication(comm_id)
-    fid = get_or_create_family(updated.get("patient_id", ""))
 
-    audience = updated.get("target_audience", "patient")
-    if audience == "patient":
-        mid = get_or_create_primary_member(fid, updated.get("patient_name", ""))
-    else:
-        mid = create_family_member(
-            fid, _AUDIENCE_MEMBER_NAMES.get(audience, audience), audience
-        )
+    # Auto-deliver to the patient's account. `delivered` reflects whether an account
+    # actually exists to receive it (a patient with no NRIC on file has none).
+    delivered = patient_has_identity(updated.get("patient_id", ""))
+    set_delivered(comm_id)
 
     if req.generate_image:
         conditions = json.loads(updated.get("conditions_json") or "[]")
@@ -214,5 +203,6 @@ def approve_communication(
     return ApproveResponse(
         id=comm_id,
         approved_at=updated["approved_at"],
-        family_link=f"{settings.frontend_origin}/family/{fid}/member/{mid}",
+        patient_name=updated.get("patient_name", ""),
+        delivered=delivered,
     )

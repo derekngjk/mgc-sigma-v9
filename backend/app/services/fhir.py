@@ -116,8 +116,25 @@ def _fetch_from_sandbox(patient_id: str) -> dict[str, Any]:
     }
 
 
+def _extract_nric(patient: dict[str, Any]) -> str:
+    """Return the patient's NRIC/FIN from Patient.identifier, or '' if absent.
+
+    Matches on the identifier type code (NRIC) or an NRIC system URI, so it works
+    for both the mock fixtures and Synapxe-seeded records.
+    """
+    for identifier in patient.get("identifier", []) or []:
+        codings = (identifier.get("type") or {}).get("coding", []) or []
+        type_codes = {(c.get("code") or "").upper() for c in codings}
+        system = (identifier.get("system") or "").upper()
+        if "NRIC" in type_codes or "FIN" in type_codes or "NRIC" in system:
+            value = (identifier.get("value") or "").strip()
+            if value:
+                return value
+    return ""
+
+
 def _parse_fhir_bundle(raw: dict[str, Any]) -> dict[str, Any]:
-    """Extract patient_name, dob, gender, and active conditions from a FHIR bundle.
+    """Extract patient_name, dob, gender, nric, and active conditions from a FHIR bundle.
 
     Missing optional fields return empty string / empty list rather than raising.
     """
@@ -135,6 +152,7 @@ def _parse_fhir_bundle(raw: dict[str, Any]) -> dict[str, Any]:
 
     dob: str = patient.get("birthDate", "")
     gender: str = patient.get("gender", "")
+    nric: str = _extract_nric(patient)
 
     conditions: list[str] = []
     for entry in raw.get("conditions", {}).get("entry", []):
@@ -151,5 +169,6 @@ def _parse_fhir_bundle(raw: dict[str, Any]) -> dict[str, Any]:
         "patient_name": patient_name,
         "dob": dob,
         "gender": gender,
+        "nric": nric,
         "conditions": conditions,
     }

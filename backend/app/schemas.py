@@ -4,6 +4,8 @@ from pydantic import BaseModel
 
 VALID_LENGTHS = {"short", "medium", "long"}
 VALID_LANGS = {"en", "zh", "ms", "ta"}
+# Portal roles are exactly the report target_audience values.
+VALID_ROLES = {"patient", "spouse", "child", "caregiver"}
 
 
 class HealthResponse(BaseModel):
@@ -59,10 +61,11 @@ class ApproveRequest(BaseModel):
 class ApproveResponse(BaseModel):
     id: str
     approved_at: str
-    family_link: str
+    patient_name: str
+    delivered: bool
 
 
-class FamilyViewResponse(BaseModel):
+class ReportViewResponse(BaseModel):
     id: str
     patient_name: str
     ai_summary_text: str
@@ -74,3 +77,38 @@ class FamilyViewResponse(BaseModel):
 class AudioResponse(BaseModel):
     url: str
     sentences: list[str]
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    role: str
+    patient_full_name: str
+    patient_nric: str
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class PatientLoginResponse(BaseModel):
+    token: str
+    patient_name: str
+    role: str
+
+
+class ReportCard(BaseModel):
+    comm_id: str
+    target_audience: str
+    approved_at: str | None = None
+    delivered_at: str | None = None
+    viewed: bool
+    has_image: bool
+
+
+class ReportListResponse(BaseModel):
+    patient_name: str
+    role: str
+    unread: int
+    reports: list[ReportCard]

@@ -16,9 +16,19 @@ def init_db(db_url: str) -> None:
                     patient_name TEXT NOT NULL,
                     dob TEXT,
                     gender TEXT,
+                    identity_hash TEXT,
                     created_at TIMESTAMPTZ DEFAULT now()
                 )
             """)
+            # Patient-account login key: peppered hash of full name + NRIC (never the
+            # raw credential). Idempotent for databases created before this column.
+            cur.execute(
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS identity_hash TEXT"
+            )
+            cur.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS patients_identity_hash_key "
+                "ON patients (identity_hash)"
+            )
 
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS care_plan_translations (
@@ -57,6 +67,18 @@ def init_db(db_url: str) -> None:
                 ALTER TABLE care_plan_translations
                 ADD COLUMN IF NOT EXISTS review_json JSONB
             """)
+            # Patient-account delivery + read tracking. delivered_to_patient_at is set
+            # on approval (a report only appears in the account once delivered);
+            # viewed_by_patient_at is set when the patient opens the card (unread =
+            # delivered but not yet viewed).
+            cur.execute("""
+                ALTER TABLE care_plan_translations
+                ADD COLUMN IF NOT EXISTS delivered_to_patient_at TIMESTAMPTZ
+            """)
+            cur.execute("""
+                ALTER TABLE care_plan_translations
+                ADD COLUMN IF NOT EXISTS viewed_by_patient_at TIMESTAMPTZ
+            """)
 
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS families (
@@ -80,4 +102,32 @@ def init_db(db_url: str) -> None:
             # writes are not blocked by missing policies on these tables.
             cur.execute("ALTER TABLE families DISABLE ROW LEVEL SECURITY")
             cur.execute("ALTER TABLE family_members DISABLE ROW LEVEL SECURITY")
+
+            # Portal accounts: one self-registered user per person, each with a role
+            # and linked to a patient. Reports are shown role-scoped; read state is
+            # tracked per user in portal_report_reads.
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS portal_users (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    password_salt TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    patient_id UUID REFERENCES patients(id) NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT now()
+                )
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS portal_report_reads (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    portal_user_id UUID REFERENCES portal_users(id) NOT NULL,
+                    comm_id UUID REFERENCES care_plan_translations(id) NOT NULL,
+                    viewed_at TIMESTAMPTZ DEFAULT now(),
+                    UNIQUE (portal_user_id, comm_id)
+                )
+            """)
+
+            cur.execute("ALTER TABLE portal_users DISABLE ROW LEVEL SECURITY")
+            cur.execute("ALTER TABLE portal_report_reads DISABLE ROW LEVEL SECURITY")
     client.get_supabase()

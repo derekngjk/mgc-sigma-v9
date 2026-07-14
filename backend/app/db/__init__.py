@@ -1,5 +1,11 @@
 """Database access layer: Supabase CRUD, storage, and schema init."""
 
+from app.db.accounts import (
+    get_patient_id_by_identity_hash,
+    get_patient_name,
+    patient_has_identity,
+    set_delivered,
+)
 from app.db.client import get_supabase
 from app.db.communications import (
     create_communication,
@@ -9,11 +15,14 @@ from app.db.communications import (
     set_translation,
     update_communication,
 )
-from app.db.families import (
-    create_family_member,
-    get_family_summary,
-    get_or_create_family,
-    get_or_create_primary_member,
+from app.db.portal import (
+    create_portal_user,
+    get_portal_user,
+    get_portal_user_by_email,
+    get_read_comm_ids,
+    get_role_report_for_user,
+    list_role_reports,
+    mark_report_read,
 )
 from app.db.schema import init_db
 from app.db.storage import (
@@ -27,18 +36,25 @@ from app.db.storage import (
 
 __all__ = [
     "create_communication",
-    "create_family_member",
+    "create_portal_user",
     "get_audio_url",
     "get_communication",
-    "get_family_summary",
     "get_image_url",
     "get_latest_approved_communication",
-    "get_or_create_family",
-    "get_or_create_primary_member",
+    "get_patient_id_by_identity_hash",
+    "get_patient_name",
+    "get_portal_user",
+    "get_portal_user_by_email",
+    "get_read_comm_ids",
+    "get_role_report_for_user",
     "get_supabase",
     "get_translation",
     "init_db",
+    "list_role_reports",
+    "mark_report_read",
+    "patient_has_identity",
     "set_audio_url",
+    "set_delivered",
     "set_image_url",
     "set_translation",
     "update_communication",

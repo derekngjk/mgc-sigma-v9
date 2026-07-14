@@ -11,6 +11,7 @@ from app.db._helpers import (
     normalize_record,
     set_json_column,
 )
+from app.services.identity import identity_hash
 
 _UPDATABLE_FIELDS = {
     "ai_summary_text",
@@ -30,15 +31,21 @@ def create_communication(
     target_audience: str = "family",
     conditions_json: str = "[]",
     condition_diff: str | None = None,
+    nric: str = "",
 ) -> str:
     supabase = client.get_supabase()
 
+    patient_row = {"epic_patient_id": epic_patient_id, "patient_name": patient_name}
+    # The account login key is derived here so the account exists as soon as the
+    # patient is fetched. Only set it when derivable, to avoid clobbering an existing
+    # hash with '' for a record that arrives without an NRIC.
+    login_hash = identity_hash(patient_name, nric)
+    if login_hash:
+        patient_row["identity_hash"] = login_hash
+
     patient_res = (
         supabase.table("patients")
-        .upsert(
-            {"epic_patient_id": epic_patient_id, "patient_name": patient_name},
-            on_conflict="epic_patient_id",
-        )
+        .upsert(patient_row, on_conflict="epic_patient_id")
         .execute()
     )
     patient_id = patient_res.data[0]["id"]

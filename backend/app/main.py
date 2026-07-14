@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db import init_db
-from app.routers import clinician, family, health
+from app.routers import account, clinician, health
 
 logging.basicConfig(
     level=settings.log_level,
@@ -34,7 +34,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(health.router)
     app.include_router(clinician.router)
-    app.include_router(family.router)
+    app.include_router(account.router)
     return app
 
 
