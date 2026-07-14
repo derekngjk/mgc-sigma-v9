@@ -3,10 +3,12 @@
 from typing import Any
 
 import httpx
+import jwt
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
+from app.services.identity import decode_patient_token
 
 _bearer = HTTPBearer()
 
@@ -38,3 +40,15 @@ def verify_clinician_token(
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     return response.json()
+
+
+def verify_patient_token(
+    credentials: HTTPAuthorizationCredentials = Security(_bearer),
+) -> str:
+    """Validate the patient session JWT and return the internal patient id."""
+    try:
+        return decode_patient_token(credentials.credentials)
+    except jwt.InvalidTokenError as exc:
+        raise HTTPException(
+            status_code=401, detail="Invalid or expired session"
+        ) from exc

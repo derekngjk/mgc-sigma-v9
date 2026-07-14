@@ -72,5 +72,13 @@ class Settings:
     def image_provider(self) -> str:
         return os.getenv("IMAGE_PROVIDER", "openai")
 
+    @property
+    def patient_jwt_secret(self) -> str:
+        return os.getenv("PATIENT_JWT_SECRET", "dev-patient-jwt-secret-change-me")
+
+    @property
+    def patient_id_pepper(self) -> str:
+        return os.getenv("PATIENT_ID_PEPPER", "dev-patient-id-pepper-change-me")
+
 
 settings = Settings()
