@@ -942,3 +942,130 @@ Two `render.yaml` changes, both backend-only (no API path change):
 - Build command: `pip install -r requirements.txt` → `pip install uv && uv sync --frozen --no-dev` (installs runtime deps only, from the lockfile).
 
 `rootDir: backend` and the Python version pin are unchanged. This path was verified locally (`uv sync --frozen --no-dev` then importing `app.main`) but not against Render's build environment — confirm on the next deploy.
+
+---
+
+## Patient Accounts — Login, Auto-Delivery, Report Collection
+
+**Files:** backend `app/services/identity.py` (new) · `app/dependencies.py` · `app/config.py` · `app/services/fhir.py` · `app/db/schema.py` · `app/db/communications.py` · `app/db/accounts.py` (new) · `app/routers/account.py` (new) · `app/routers/clinician.py` · `app/schemas.py` · `app/main.py`; frontend `lib/patientSession.ts` · `components/PatientAuthGate.tsx` · `components/ReportView.tsx` · `pages/PatientLoginPage.tsx` · `pages/PatientDashboardPage.tsx` · `pages/PatientReportPage.tsx` · `App.tsx` · `pages/ClinicianPage.tsx`; tests `test_identity.py` · `test_account_login.py` · `test_account_reports.py` (new) plus reworked family→account tests.
+
+### What was built
+
+The clinician-sends-a-magic-link delivery model was replaced with a **patient account**. On approval a report is **auto-delivered** to the patient's account; the patient signs in with the **patient's full name + NRIC** and sees a **collection of report cards** (each tagged with intended audience + release date) with an **in-app unread badge**. All report-viewing features (translation, TTS, image, condition diff, print) are preserved — lifted into a shared `ReportView` component.
+
+### Login model (one shared account per patient)
+
+**Why one account, not one per audience:** the system only ever holds the *patient's* NRIC — never the spouse's / child's / caregiver's — so a name+NRIC credential can only authenticate the patient's identity. There is therefore one account per patient; whoever the patient shares the credentials with signs into the same account and reads the card written for their audience. The login page is exactly two fields (patient's full name + NRIC).
+
+**Credentials are never stored.** `identity_hash = HMAC-SHA256(pepper, "NORMALIZED NAME|NORMALIZED NRIC")` is stored on `patients.identity_hash` (UNIQUE). Login hashes the typed input and looks up the row. Normalization (uppercase + collapsed whitespace; NRIC uppercased) absorbs display variants. HMAC + a server pepper (`PATIENT_ID_PEPPER`) raises the bar over a bare SHA of low-entropy input — but name+NRIC is guessable, so this is explicitly **PoC-grade**, documented not solved.
+
+**Session = backend-issued JWT.** `PyJWT` (already a dependency, previously unused) mints an HS256 token (`typ="patient"`, 7-day expiry, signed with `PATIENT_JWT_SECRET`); `verify_patient_token` validates it, mirroring `verify_clinician_token`. Distinct from the clinician Supabase-magic-link auth on `/clinician`.
+
+### Delivery + notification
+
+- `create_communication` computes `identity_hash` from the FHIR name+NRIC at fetch time, so the account exists before approval. NRIC is newly parsed in `fhir._extract_nric` (matches `Patient.identifier` by NRIC/FIN type code or NRIC system URI); it is threaded through the pipeline but never stored in the clear.
+- **Approve auto-delivers:** `set_delivered` stamps `delivered_to_patient_at`; a report only surfaces in the account once delivered. `ApproveResponse` dropped `family_link` → now `{id, approved_at, patient_name, delivered}`. `delivered=false` when the patient has no NRIC (no account can exist); the clinician success card then warns and offers Print instead of confirming delivery.
+- **Notification is in-app only** (no email infra exists and the name+NRIC login captures no email): `viewed_by_patient_at` (set on first open) gives `unread = delivered && not viewed`. The dashboard shows an unread count badge and per-card "New" dots; opening a card marks it read.
+
+### Rework — removing the family indirection
+
+- Deleted `app/db/families.py`, `app/routers/family.py`, the `/api/family/{fid}/member/{mid}` routes (+ `/audio`), the legacy `GET /api/communications/{id}`, and `ApproveResponse.family_link`. The `families` / `family_members` tables are left in existing databases (harmless, unused) rather than dropped.
+- New **authed** account endpoints, namespaced `/api/account/*` to avoid clashing with the clinician `/api/patient/{id}`: `POST /login`, `GET /reports` (cards + unread count), `GET /reports/{comm_id}?lang=` (view; marks viewed), `GET /reports/{comm_id}/audio?lang=`.
+- `resolve_summary_text` moved from the family router to `services/summaries.py` so the account router reuses it (translate + cache, 503/502 mapping).
+- **`get_report_for_patient` is the authorization gate:** it returns a record only if it is the caller's, approved, and delivered — so patient A cannot read patient B's `comm_id` (→ 404). Account report queries use only method-chain shapes the test Supabase mock already supports (select/eq/order/update), filtering delivered-status in Python.
+
+### Frontend
+
+- **Patient auth is separate from clinician auth:** `lib/patientSession.ts` stores the JWT in `localStorage`; `PatientAuthGate` guards `/patient*`; a 401 clears the token and bounces to `/patient/login`.
+- **`ReportView.tsx`** is the former `FamilyPage` body extracted into a component parameterized by `loadReport(lang)` / `loadAudio(lang)`, so the same viewer serves the account (and any future entry point). `PatientReportPage` wires it to the authed endpoints; `FamilyPage.tsx` was deleted.
+- **`PatientDashboardPage`** renders cards (audience chip, release date, unread dot) + a header unread badge; **`PatientLoginPage`** is the two clearly-labeled fields.
+- **Clinician success card:** QR + copy-link replaced by a delivery confirmation ("Delivered to {patient}'s account") or a no-NRIC warning; Print Handout kept. `react-qr-code` is no longer used (the dependency is left in `package.json`).
+
+### Testing
+
+- **New:** `test_identity.py` (hash determinism / incompleteness, token round-trip, bad-signature / wrong-type / expired rejection); `test_account_login.py` (correct → 200 + token, wrong → 401); `test_account_reports.py` (list + unread count, view marks-unread-as-viewed, already-viewed no re-mark, not-owned → 404).
+- **Reworked family→account:** `test_translation_routes.py` and the `test_tts.py` endpoint tests retargeted to `/api/account/reports/{comm_id}(/audio)`; `test_resolve_summary.py` repointed to `services/summaries`; `test_task_4_2.py` asserts `delivered` + `patient_name` (no `family_link`) and consumes the extra `set_delivered` execute; `test_image.py` approve tests add the 4th `care_plan_translations` execute + a patients `identity_hash` stub; `test_change_tracking.py` mock FHIR gains `nric`; `test_family_route.py` and `test_task_4_3.py` deleted. `conftest.py` adds a `verify_patient_token` override.
+- **Result:** backend 113 passing + ruff clean; frontend `tsc` clean, 8 vitest passing, production build succeeds.
+
+### Follow-ups / notes
+
+- Delivery is stamped even when `delivered=false` is reported to the clinician (no account yet); if the patient's NRIC is later added, the report would surface — acceptable at PoC scale.
+- Name matching is exact after normalization against the FHIR name text; unusual name orderings can still miss. The login fields are labelled "as registered" to set expectations.
+- Live end-to-end (clinician approve → patient login → cards → open) requires the real Supabase (startup `init_db` adds `identity_hash` / `delivered_to_patient_at` / `viewed_by_patient_at` idempotently) plus LLM keys, and was not run against the live tenant here; the mocked TestClient suite exercises every new endpoint's logic.
+
+---
+
+## Portal Accounts — Per-User Registration & Role-Scoped Reports
+
+**Supersedes the section above.** The "one shared account per patient (login = name + NRIC)" model
+was replaced with **one self-registered account per person**. Each family member / caregiver /
+patient registers with **email + password**, declares their **role**, links to a patient, and sees
+**only the reports written for their role**. Read/unread is now per-user.
+
+**Files:** backend `app/services/identity.py` (password hashing) · `app/db/portal.py` (new) ·
+`app/db/schema.py` · `app/db/accounts.py` (trimmed) · `app/db/__init__.py` · `app/routers/account.py`
+· `app/schemas.py`; frontend `pages/PatientRegisterPage.tsx` (new) · `pages/PatientLoginPage.tsx` ·
+`pages/PatientDashboardPage.tsx` · `App.tsx` · `pages/ClinicianPage.tsx`; tests `test_identity.py` ·
+`test_account_login.py` · `test_account_reports.py` · `test_tts.py` · `test_translation_routes.py` ·
+`conftest.py`.
+
+### What changed vs. the shared-account model
+- **Auth is now email + password**, self-registered. Passwords are hashed with stdlib
+  **PBKDF2-HMAC-SHA256** (`hash_password`/`verify_password` in `identity.py`, 240k iterations, per-user
+  16-byte salt) — no new dependency, no plaintext. Session is still our own `issue_patient_token`
+  JWT, but `sub` is now the **portal_user_id** (not the patient_id).
+- **Registration links to a patient** by the patient's full name + NRIC, reusing `identity_hash` +
+  `get_patient_id_by_identity_hash` — the patient must already exist (a clinician must have fetched
+  them). Unknown patient → 404, duplicate email → 409, bad role / short password → 400.
+- **Roles are the four `target_audience` values** (`patient`/`spouse`/`child`/`caregiver`). A user
+  sees delivered, approved reports where `patient_id = theirs` AND `target_audience = their role`.
+  `get_role_report_for_user` is the per-request authz gate (own patient + own role + delivered), so a
+  caregiver opening a patient-audience report gets 404.
+- **Read state is per-user**, not per-report: new `portal_report_reads(portal_user_id, comm_id,
+  viewed_at)` with a unique pair; `mark_report_read` is an idempotent upsert; the dashboard's unread
+  count is `list_role_reports` minus `get_read_comm_ids(user)`. The old single
+  `care_plan_translations.viewed_by_patient_at` column is left in place but unused.
+
+### New data model (`schema.py`, idempotent)
+- `portal_users`: `id` · `email` UNIQUE · `password_hash` · `password_salt` · `role` · `patient_id`
+  FK · `created_at` (RLS disabled).
+- `portal_report_reads`: `id` · `portal_user_id` FK · `comm_id` FK · `viewed_at` ·
+  UNIQUE(`portal_user_id`,`comm_id`) (RLS disabled).
+
+### DB layer (`app/db/portal.py`)
+`get_portal_user_by_email`, `get_portal_user`, `create_portal_user`, `list_role_reports(patient_id,
+role)`, `get_role_report_for_user(comm_id, patient_id, role)`, `get_read_comm_ids(user)`,
+`mark_report_read(user, comm)`. The obsolete `list_delivered_reports` / `get_report_for_patient` /
+`mark_report_viewed` were removed from `accounts.py`; `set_delivered`, `patient_has_identity`,
+`get_patient_id_by_identity_hash`, `get_patient_name` stay (clinician delivery + registration link).
+
+### Endpoints (`app/routers/account.py`)
+`POST /register`, `POST /login` (email + password → token), `GET /reports` (role-scoped cards +
+per-user unread + `role`), `GET /reports/{id}` (role authz + mark read), `GET /reports/{id}/audio`
+(role authz). `verify_patient_token` now yields the portal_user_id; each endpoint loads the user
+(role + patient_id) via `get_portal_user`. Clinician side unchanged; success-card copy now says the
+patient & family can **register** and each sees the reports for their role.
+
+### Frontend
+`PatientRegisterPage` (email, password, role dropdown, patient name + NRIC); `PatientLoginPage` is now
+email + password with a register link; the dashboard shows "Signed in as {role}" with role-scoped,
+per-user cards/unread. `ReportView` / `PatientReportPage` / `PatientAuthGate` / `patientSession.ts`
+unchanged.
+
+### Testing & verification
+- **122 backend tests** pass + ruff clean. `test_identity` adds PBKDF2 round-trip; `test_account_login`
+  covers register (200 / 404 / 409 / 400) and login (200 / 401); `test_account_reports` asserts
+  role-scoping (query called with the user's role), per-user unread from `get_read_comm_ids`, opening
+  marks read, cross-role/patient → 404, and a two-read-set case proving independent unread. `conftest`
+  returns a portal_user_id; tests patch `get_portal_user`.
+- **Live end-to-end** (script vs. the running backend + Supabase): seeded a patient- and a
+  caregiver-audience report for one patient, registered a patient-user and a caregiver-user →
+  **15/15**: each sees only their role's report, caregiver→patient report is 404, opening one user's
+  report leaves the other's unread untouched, and duplicate-email / unknown-patient / wrong-password
+  all reject. Frontend `tsc` + `vite build` + 8 vitest pass.
+
+### Risks / notes (unchanged posture)
+- **PoC-grade linking:** knowing a patient's name + NRIC is enough to self-register for any role and
+  read that role's reports (no clinician-issued invite code).
+- **One patient per account:** a caregiver for two patients needs two email accounts.
+- No email verification; the PBKDF2 iteration count is fixed in code.

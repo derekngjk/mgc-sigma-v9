@@ -11,7 +11,7 @@ MGC PoC is a two-service monorepo that simulates an Epic EHR-embedded applicatio
 1. Pull synthetic clinical data from the Epic Open FHIR Sandbox
 2. Translate it into a patient/family-friendly summary via LLM (GPT-4o or Anthropic)
 3. Gate delivery behind a clinician Human-in-the-Loop (HITL) approval step
-4. Surface the approved summary to the patient/family via a one-time magic link
+4. Auto-deliver the approved summary to the patient's care circle: each person (patient / spouse / adult child / caregiver) self-registers a portal account (email + password), links to the patient via the patient's full name + NRIC, and sees only the summaries written for their role
 
 There are no shared packages between the two services. The backend is the single source of truth for state; the frontend is purely a UI layer that calls the backend API.
 
@@ -28,28 +28,28 @@ mgc-sigma-v9/
 │   │   ├── main.py             create_app() factory, CORS, lifespan, router wiring; `app` ASGI entry
 │   │   ├── config.py           Settings (env vars, read live) + path anchors (MOCK_DATA_DIR, SYNTHEA_DIR)
 │   │   ├── schemas.py          Pydantic request/response models + validation sets
-│   │   ├── dependencies.py     verify_clinician_token FastAPI dependency (Supabase Auth)
-│   │   ├── routers/            health.py · clinician.py (patient/generate/approve) · family.py (viewer/audio)
-│   │   ├── services/           fhir.py · images.py · image_brief.py · tts.py · summaries.py · prompts.py
+│   │   ├── dependencies.py     verify_clinician_token (Supabase Auth) + verify_patient_token (patient JWT)
+│   │   ├── routers/            health.py · clinician.py (patient/generate/approve) · account.py (patient login/reports/audio)
+│   │   ├── services/           fhir.py · images.py · image_brief.py · tts.py · summaries.py · prompts.py · identity.py (name+NRIC hash, password hash, portal JWT)
 │   │   │   └── llm/            base.py (LLMProvider Protocol) · providers.py (Anthropic/OpenAI/Google) · get_provider()
-│   │   └── db/                 client.py · schema.py · communications.py · families.py · storage.py · _helpers.py
+│   │   └── db/                 client.py · schema.py · communications.py · accounts.py (patient lookup/delivery) · portal.py (users + role reports + reads) · storage.py · _helpers.py
 │   ├── scripts/               Ops scripts — seed_healthx.py, synthea_to_fhir.py (run via `python -m scripts.<name>`)
 │   ├── mock_data/
 │   │   └── mock-oncology-123.json   Synthetic oncology fixture (bypasses Epic Sandbox)
 │   ├── pyproject.toml          Deps ([project] + [dependency-groups] dev), pytest + ruff config — uv-managed
 │   ├── uv.lock                 Pinned dependency lockfile (single source of truth)
 │   ├── .python-version         Pins the Python version (read by uv; Render fallback)
-│   ├── .env.example            SUPABASE_URL · SUPABASE_KEY · SUPABASE_DB_URL · FHIR_BASE_URL · LLM_PROVIDER
+│   ├── .env.example            SUPABASE_URL · SUPABASE_KEY · SUPABASE_DB_URL · FHIR_BASE_URL · LLM_PROVIDER · PATIENT_JWT_SECRET · PATIENT_ID_PEPPER
 │   └── tests/                  pytest suite (imports the app via `app.*`; patches router/service module globals)
 │
 ├── frontend/                   React 18 + Vite + TypeScript + Tailwind CSS
 │   ├── src/
 │   │   ├── main.tsx            React entry point — BrowserRouter + StrictMode wrapper
-│   │   ├── App.tsx             Routes: / → WelcomeScreen, /clinician → ClinicianPage, /family/:fid/member/:mid → FamilyPage
+│   │   ├── App.tsx             Routes: / → Welcome, /login + /clinician (clinician), /patient/login + /patient + /patient/report/:commId (patient account)
 │   │   ├── index.css           Tailwind base import
-│   │   └── pages/
-│   │       └── ClinicianPage.tsx   Full clinician workflow — patient selector, FHIR data panel,
-│   │                               AI draft panel (editable textarea), Approve button
+│   │   ├── lib/                supabase.ts (clinician auth) · patientSession.ts (patient JWT) · markdown.ts
+│   │   ├── components/         AuthGate.tsx (clinician) · PatientAuthGate.tsx · ReportView.tsx (shared report viewer)
+│   │   └── pages/              ClinicianPage · LoginPage · PatientRegisterPage · PatientLoginPage · PatientDashboardPage · PatientReportPage
 │   ├── index.html
 │   ├── vite.config.ts
 │   ├── tailwind.config.js
@@ -63,8 +63,12 @@ mgc-sigma-v9/
 | Route | Status | Purpose |
 | --- | --- | --- |
 | `/` | ✅ Live | Welcome screen — backend health check, link to `/clinician` |
-| `/clinician` | ✅ Live | EHR-embedded tab — patient selector, side-by-side Raw FHIR vs. AI Draft, Approve button |
-| `/family/:fid/member/:mid` | ✅ Live | Mobile-first patient/family viewer — validates family+member pair; fetches latest approved summary for the patient; shows condition diff (new/resolved) if changes exist; 404 on invalid pair or no approved summary |
+| `/clinician` | ✅ Live | EHR-embedded tab (guarded by `AuthGate`/Supabase) — patient selector, side-by-side Raw FHIR vs. AI Draft, Approve button; success card confirms account delivery |
+| `/login` | ✅ Live | Clinician sign-in — Supabase magic-link (passwordless email) |
+| `/patient/register` | ✅ Live | Portal self-registration — email, password, role (patient/spouse/child/caregiver), + patient's full name & NRIC to link |
+| `/patient/login` | ✅ Live | Portal sign-in — email + password |
+| `/patient` | ✅ Live | Portal dashboard (guarded by `PatientAuthGate`) — the user's role-scoped reports as cards + per-user unread badge; "Signed in as {role}" |
+| `/patient/report/:commId` | ✅ Live | Single report viewer (mobile-first `ReportView`) — translation, TTS, illustration, condition diff, print; authorized to the caller's patient + role |
 
 ### Backend API surface
 
@@ -73,9 +77,12 @@ mgc-sigma-v9/
 | `GET /health` | ✅ Live | Liveness check |
 | `GET /api/patient/{id}` | ✅ Live | Fetch + parse FHIR data (Patient, Condition, CarePlan); falls back to mock JSON for `mock-oncology-123`; creates a Draft `Communications` record; computes three-way condition diff (added/removed/ongoing) vs. last approved record; returns `PatientResponse` with `condition_diff` |
 | `POST /api/generate` | ✅ Live | Accepts `comm_id` + `target_audience`; calls LLM (`LLM_PROVIDER` env var selects Anthropic or OpenAI); stores summary in `Communications`; returns `GenerateResponse` |
-| `POST /api/communications/{id}/approve` | ✅ Live | Saves edited `ai_summary_text`, flips status to `Approved`; creates/reuses the patient's `families` + `family_members` records; returns `id` + `approved_at` + `family_link` in new `/family/{fid}/member/{mid}` format |
-| `GET /api/communications/{id}` | ✅ Live | Legacy family viewer endpoint — return approved summary by comm_id; 404 if unknown or status != Approved |
-| `GET /api/family/{fid}/member/{mid}` | ✅ Live | Family member access endpoint — validates both IDs belong together; returns latest approved summary for the patient; 404 if pair is invalid or no approved summary exists |
+| `POST /api/communications/{id}/approve` | ✅ Live | Saves edited `ai_summary_text`, flips status to `Approved`, auto-delivers to the patient's account (`set_delivered`); returns `id` + `approved_at` + `patient_name` + `delivered` (`false` when the patient has no NRIC → no account) |
+| `POST /api/account/register` | ✅ Live | Portal registration — body `{email, password, role, patient_full_name, patient_nric}`; links via `identity_hash`; creates a `portal_users` row (PBKDF2-hashed password); returns a session JWT + `patient_name` + `role`. 404 unknown patient · 409 duplicate email · 400 bad role/short password |
+| `POST /api/account/login` | ✅ Live | Portal login — body `{email, password}`; verifies against `portal_users`; returns JWT + `patient_name` + `role`, or 401 |
+| `GET /api/account/reports` | ✅ Live | (portal JWT) The user's **role-scoped** delivered reports as cards + **per-user** unread count (from `portal_report_reads`) + `role` |
+| `GET /api/account/reports/{comm_id}` | ✅ Live | (portal JWT) One report matching the caller's patient **and role**; `?lang=` translates; marks read for this user; 404 otherwise |
+| `GET /api/account/reports/{comm_id}/audio` | ✅ Live | (portal JWT) TTS MP3 + sentences for a role-authorized report; `?lang=` selects language |
 
 ### Supabase schema (PostgreSQL)
 
@@ -85,6 +92,7 @@ mgc-sigma-v9/
 - `patient_name` (TEXT): Full name
 - `dob` (TEXT): Date of birth
 - `gender` (TEXT): Gender
+- `identity_hash` (TEXT Unique): Peppered HMAC of normalized full name + NRIC — the patient-account login key. Raw name+NRIC is never stored.
 - `created_at` (TIMESTAMPTZ): Auto-set on creation
 
 #### `care_plan_translations` table
@@ -100,20 +108,33 @@ mgc-sigma-v9/
 - `approved_at` (TIMESTAMPTZ): Timestamp of clinician approval
 - `conditions_json` (JSONB): Parsed active conditions
 - `condition_diff` (JSONB): NEW/ONGOING/RESOLVED delta
+- `translations_json` (JSONB): Cached per-language translations
+- `audio_urls_json` (JSONB): Cached per-language TTS Storage URLs
+- `image_url` (TEXT): Cached visual-aid Storage URL
+- `approved_by_user_id` (UUID): Clinician (Supabase Auth) who approved — audit trail
+- `delivered_to_patient_at` (TIMESTAMPTZ): Set on approval; a report appears in the portal only once delivered
+- `viewed_by_patient_at` (TIMESTAMPTZ): **Deprecated** — read state is now per-user in `portal_report_reads`
 
-#### `families` table
+#### `portal_users` table
 
-- `id` (UUID PK): Family group identifier — the `:fid` in the magic link
-- `patient_id` (UUID FK, UNIQUE): Reference to `patients.id` — one family group per patient, stable across approvals
+- `id` (UUID PK): Portal account id — the JWT `sub`
+- `email` (TEXT Unique): Login email
+- `password_hash` / `password_salt` (TEXT): PBKDF2-HMAC-SHA256 hash + per-user salt (no plaintext)
+- `role` (TEXT): One of `patient` / `spouse` / `child` / `caregiver` — matches report `target_audience`
+- `patient_id` (UUID FK): The patient this account is linked to (set at registration via name+NRIC)
 - `created_at` (TIMESTAMPTZ): Auto-set on creation
 
-#### `family_members` table
+#### `portal_report_reads` table
 
-- `id` (UUID PK): Family member identifier — the `:mid` in the magic link
-- `family_id` (UUID FK): Reference to `families.id`
-- `name` (TEXT): Display name of the member
-- `relationship` (TEXT): Role within the family, e.g. `"patient"`, `"spouse"`, `"child"`
-- `created_at` (TIMESTAMPTZ): Auto-set on creation
+- `id` (UUID PK): Row id
+- `portal_user_id` (UUID FK): Reference to `portal_users.id`
+- `comm_id` (UUID FK): Reference to `care_plan_translations.id`
+- `viewed_at` (TIMESTAMPTZ): When this user first opened the report
+- UNIQUE(`portal_user_id`, `comm_id`): One read-record per (user, report); `mark_report_read` upserts
+
+#### `families` / `family_members` tables — **deprecated**
+
+Left in existing databases but no longer read or written. The old `/family/:fid/member/:mid` magic-link model was replaced by per-user portal accounts (`portal_users`); a report is authorized by the caller's `patient_id` **and role**, not by a family/member pair.
 
 ---
 
