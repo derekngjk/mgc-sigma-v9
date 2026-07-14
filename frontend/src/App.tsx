@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { AuthGate } from './components/AuthGate';
+import { PatientAuthGate } from './components/PatientAuthGate';
 import ClinicianPage from './pages/ClinicianPage';
-import FamilyPage from './pages/FamilyPage';
 import LoginPage from './pages/LoginPage';
+import PatientDashboardPage from './pages/PatientDashboardPage';
+import PatientLoginPage from './pages/PatientLoginPage';
+import PatientRegisterPage from './pages/PatientRegisterPage';
+import PatientReportPage from './pages/PatientReportPage';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -85,7 +89,24 @@ export default function App() {
           </AuthGate>
         }
       />
-      <Route path="/family/:fid/member/:mid" element={<FamilyPage />} />
+      <Route path="/patient/login" element={<PatientLoginPage />} />
+      <Route path="/patient/register" element={<PatientRegisterPage />} />
+      <Route
+        path="/patient"
+        element={
+          <PatientAuthGate>
+            <PatientDashboardPage />
+          </PatientAuthGate>
+        }
+      />
+      <Route
+        path="/patient/report/:commId"
+        element={
+          <PatientAuthGate>
+            <PatientReportPage />
+          </PatientAuthGate>
+        }
+      />
     </Routes>
   );
 }

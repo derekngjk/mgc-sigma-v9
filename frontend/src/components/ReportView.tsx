@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { inlineToHtml, markdownToHtml, openPrintWindow, PRINT_FONT, splitMarkdownSentences } from '../lib/markdown';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+import {
+  inlineToHtml,
+  markdownToHtml,
+  openPrintWindow,
+  PRINT_FONT,
+  splitMarkdownSentences,
+} from '../lib/markdown';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
 type PageState = 'loading' | 'not_found' | 'loaded';
-type Lang = 'en' | 'zh' | 'ms' | 'ta';
+export type Lang = 'en' | 'zh' | 'ms' | 'ta';
 
 interface ConditionDiff {
   added: string[];
@@ -15,13 +18,19 @@ interface ConditionDiff {
   ongoing: string[];
 }
 
-interface FamilyViewData {
+export interface ReportData {
   id: string;
   patient_name: string;
   ai_summary_text: string;
   approved_at: string;
   condition_diff: ConditionDiff;
   image_url?: string | null;
+}
+
+interface ReportViewProps {
+  loadReport: (lang: Lang) => Promise<ReportData>;
+  loadAudio: (lang: Lang) => Promise<{ url: string; sentences: string[] }>;
+  onBack?: () => void;
 }
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -34,7 +43,6 @@ const LANG_OPTIONS: { code: Lang; label: string }[] = [
 ];
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-
 
 function formatDate(iso: string): string {
   try {
@@ -58,7 +66,7 @@ function LoadingScreen() {
   );
 }
 
-function NotFoundScreen() {
+function NotFoundScreen({ onBack }: { onBack?: () => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6">
       <div className="max-w-sm text-center">
@@ -67,9 +75,17 @@ function NotFoundScreen() {
           Summary not available
         </h1>
         <p className="text-sm text-slate-500">
-          This link may be invalid, or your summary hasn't been finalised yet.
+          This report may be unavailable, or your summary hasn't been finalised yet.
           Please check with your care team.
         </p>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="mt-4 text-sm font-medium text-teal-600 hover:text-teal-700"
+          >
+            ← Back to my reports
+          </button>
+        )}
       </div>
     </div>
   );
@@ -129,12 +145,11 @@ function IllustrationSection({ url }: { url: string }) {
   );
 }
 
-// ── main page ─────────────────────────────────────────────────────────────────
+// ── main component ────────────────────────────────────────────────────────────
 
-export default function FamilyPage() {
-  const { fid, mid } = useParams<{ fid: string; mid: string }>();
+export function ReportView({ loadReport, loadAudio, onBack }: ReportViewProps) {
   const [pageState, setPageState] = useState<PageState>('loading');
-  const [data, setData] = useState<FamilyViewData | null>(null);
+  const [data, setData] = useState<ReportData | null>(null);
   const [lang, setLang] = useState<Lang>('en');
   const [summaryText, setSummaryText] = useState('');
   const [translating, setTranslating] = useState(false);
@@ -151,23 +166,24 @@ export default function FamilyPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    if (!fid || !mid) {
-      setPageState('not_found');
-      return;
-    }
-    fetch(`${API_BASE}/api/family/${fid}/member/${mid}`)
-      .then(async (res) => {
-        if (!res.ok) { setPageState('not_found'); return; }
-        const json = (await res.json()) as FamilyViewData;
+    let cancelled = false;
+    loadReport('en')
+      .then((json) => {
+        if (cancelled) return;
         setData(json);
         setSummaryText(json.ai_summary_text);
         setPageState('loaded');
       })
-      .catch(() => setPageState('not_found'));
-  }, [fid, mid]);
+      .catch(() => {
+        if (!cancelled) setPageState('not_found');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadReport]);
 
   async function handleLangChange(newLang: Lang) {
-    if (newLang === lang || translating || !fid || !mid) return;
+    if (newLang === lang || translating) return;
     setTranslating(true);
     setTranslateError(null);
     // Reset audio — it's stale for a different language
@@ -175,16 +191,9 @@ export default function FamilyPage() {
     setSentences([]);
     setCurrentSentenceIdx(0);
     setIsPlaying(false);
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
+    if (audioRef.current) audioRef.current.pause();
     try {
-      const res = await fetch(`${API_BASE}/api/family/${fid}/member/${mid}?lang=${newLang}`);
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(body.detail ?? `HTTP ${res.status}`);
-      }
-      const json = (await res.json()) as FamilyViewData;
+      const json = await loadReport(newLang);
       setSummaryText(json.ai_summary_text);
       setLang(newLang);
     } catch (e) {
@@ -195,7 +204,6 @@ export default function FamilyPage() {
   }
 
   async function handlePlay() {
-    if (!fid || !mid) return;
     // Toggle play/pause if audio is already loaded
     if (audioUrl && audioRef.current) {
       if (isPlaying) {
@@ -209,12 +217,7 @@ export default function FamilyPage() {
     }
     setAudioLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/family/${fid}/member/${mid}/audio?lang=${lang}`);
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(body.detail ?? `HTTP ${res.status}`);
-      }
-      const payload = (await res.json()) as { url: string; sentences: string[] };
+      const payload = await loadAudio(lang);
       setSentences(payload.sentences);
       setCurrentSentenceIdx(0);
       setAudioUrl(payload.url);
@@ -246,7 +249,10 @@ export default function FamilyPage() {
       }
       setCurrentSentenceIdx(idx);
     };
-    const onEnded = () => { setIsPlaying(false); setCurrentSentenceIdx(0); };
+    const onEnded = () => {
+      setIsPlaying(false);
+      setCurrentSentenceIdx(0);
+    };
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
 
@@ -262,19 +268,30 @@ export default function FamilyPage() {
       audio.removeEventListener('play', onPlay);
       audio.removeEventListener('pause', onPause);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioUrl]);
 
   if (pageState === 'loading') return <LoadingScreen />;
-  if (pageState === 'not_found' || !data) return <NotFoundScreen />;
+  if (pageState === 'not_found' || !data) return <NotFoundScreen onBack={onBack} />;
 
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="border-b border-slate-100 bg-white px-6 py-4">
-        <div className="mx-auto max-w-lg">
-          <span className="text-sm font-semibold text-teal-600">Sigma Tech</span>
-          <span className="mx-2 text-slate-300">·</span>
-          <span className="text-sm text-slate-500">Your Health Summary</span>
+        <div className="mx-auto flex max-w-lg items-center justify-between">
+          <div>
+            <span className="text-sm font-semibold text-teal-600">Sigma Tech</span>
+            <span className="mx-2 text-slate-300">·</span>
+            <span className="text-sm text-slate-500">Your Health Summary</span>
+          </div>
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="text-sm font-medium text-teal-600 hover:text-teal-700"
+            >
+              ← My reports
+            </button>
+          )}
         </div>
       </header>
 
@@ -359,7 +376,6 @@ export default function FamilyPage() {
               const highlighted = i === currentSentenceIdx;
               const hl = highlighted ? 'rounded bg-amber-100 px-0.5' : '';
 
-              // Heading line
               const hMatch = s.match(/^(#{1,3})\s+(.+)$/);
               if (hMatch) {
                 const weight =
@@ -377,7 +393,6 @@ export default function FamilyPage() {
                 );
               }
 
-              // List item
               const lMatch = s.match(/^[-*+]\s+(.+)$/);
               if (lMatch) {
                 return (
@@ -391,7 +406,6 @@ export default function FamilyPage() {
                 );
               }
 
-              // Regular sentence — inline so consecutive sentences flow as a paragraph
               return (
                 <span
                   key={i}
@@ -419,7 +433,8 @@ export default function FamilyPage() {
         <div className="mt-8 flex justify-center">
           <button
             onClick={() => {
-              const activeLangLabel = LANG_OPTIONS.find((l) => l.code === lang)?.label ?? lang.toUpperCase();
+              const activeLangLabel =
+                LANG_OPTIONS.find((l) => l.code === lang)?.label ?? lang.toUpperCase();
               const bodyHtml = markdownToHtml(summaryText);
               const imageHtml = data.image_url
                 ? `<div class="illustration"><img src="${data.image_url}" alt="Visual aid illustration"/></div>`

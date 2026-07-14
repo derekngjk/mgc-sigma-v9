@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import QRCode from 'react-qr-code';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { markdownToHtml, openPrintWindow, PRINT_FONT } from '../lib/markdown';
@@ -495,7 +494,7 @@ export default function ClinicianPage({ session }: { session: Session }) {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
-  const [approvedLink, setApprovedLink] = useState('');
+  const [approvedDelivered, setApprovedDelivered] = useState(false);
   const [generateImage, setGenerateImage] = useState(false);
   const [enableReview, setEnableReview] = useState(false);
   const [review, setReview] = useState<ReviewVerdict | null>(null);
@@ -574,8 +573,8 @@ export default function ClinicianPage({ session }: { session: Session }) {
         const body = (await res.json().catch(() => ({}))) as { detail?: string };
         throw new Error(body.detail ?? `HTTP ${res.status}`);
       }
-      const data = (await res.json()) as { family_link: string };
-      setApprovedLink(data.family_link);
+      const data = (await res.json()) as { patient_name: string; delivered: boolean };
+      setApprovedDelivered(data.delivered);
       setStage('approved');
     } catch (e) {
       setApproveError(e instanceof Error ? e.message : 'Unknown error');
@@ -632,7 +631,7 @@ export default function ClinicianPage({ session }: { session: Session }) {
               setFetchError(null);
               setGenerateError(null);
               setApproveError(null);
-              setApprovedLink('');
+              setApprovedDelivered(false);
               setReview(null);
             }}
             disabled={isFetching}
@@ -692,29 +691,29 @@ export default function ClinicianPage({ session }: { session: Session }) {
               </p>
             )}
 
-            {/* QR code */}
-            <div className="mt-6 flex flex-col items-center gap-3 rounded-md border border-emerald-200 bg-white p-6">
-              <QRCode value={approvedLink} size={160} />
-              <p className="text-center text-xs text-slate-500">
-                Scan to open the care summary on a phone or tablet
-              </p>
-            </div>
-
-            {/* Copyable link */}
-            <p className="mt-5 text-sm text-emerald-800">Or share the link directly:</p>
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                readOnly
-                value={approvedLink}
-                className="flex-1 rounded-md border border-emerald-300 bg-white px-3 py-2 font-mono text-sm text-slate-700 focus:outline-none"
-              />
-              <button
-                onClick={() => navigator.clipboard.writeText(approvedLink)}
-                className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 print:hidden"
-              >
-                Copy
-              </button>
-            </div>
+            {/* Delivery confirmation */}
+            {approvedDelivered ? (
+              <div className="mt-6 rounded-md border border-emerald-200 bg-white p-5">
+                <p className="text-sm font-semibold text-emerald-900">
+                  ✓ Delivered to {patient?.patient_name ?? 'the patient'}&rsquo;s care circle
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  The patient and their family can register at the portal (using the
+                  patient&rsquo;s full name &amp; NRIC and choosing their role), and each person
+                  sees the summaries written for them &mdash; no link to send.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-6 rounded-md border border-amber-200 bg-amber-50 p-5">
+                <p className="text-sm font-semibold text-amber-900">
+                  Not delivered to an account
+                </p>
+                <p className="mt-1 text-sm text-amber-800">
+                  This patient has no NRIC on file, so no portal account exists yet. Print
+                  the handout below to share the summary directly.
+                </p>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="mt-6 flex items-center gap-4">
@@ -757,7 +756,7 @@ ${bodyHtml}
                   setPatient(null);
                   setDraftText('');
                   setCommId('');
-                  setApprovedLink('');
+                  setApprovedDelivered(false);
                   setApproveError(null);
                   setFetchError(null);
                   setGenerateError(null);
