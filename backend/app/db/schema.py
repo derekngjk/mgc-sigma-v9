@@ -53,6 +53,10 @@ def init_db(db_url: str) -> None:
                 ALTER TABLE care_plan_translations
                 ADD COLUMN IF NOT EXISTS image_url TEXT
             """)
+            cur.execute("""
+                ALTER TABLE care_plan_translations
+                ADD COLUMN IF NOT EXISTS review_json JSONB
+            """)
 
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS families (

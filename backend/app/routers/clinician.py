@@ -27,11 +27,13 @@ from app.schemas import (
     GenerateRequest,
     GenerateResponse,
     PatientResponse,
+    ReviewVerdict,
 )
 from app.services.fhir import FHIRError, PatientNotFoundError, fetch_patient_data
 from app.services.image_brief import generate_image_brief, minimal_brief
 from app.services.images import ImageConfigError, ImageError, generate_visual
 from app.services.llm import LLMConfigError, LLMError
+from app.services.reviews import verify_summary
 from app.services.summaries import VALID_AUDIENCES, generate_summary
 
 logger = logging.getLogger(__name__)
@@ -149,15 +151,28 @@ def generate(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    update_communication(
-        req.comm_id,
-        ai_summary_text=summary,
-        target_audience=req.target_audience,
-    )
+
+    # Optional independent review. verify_summary never raises
+    # If failed to call reviewer, set to review unavailable
+    review: ReviewVerdict | None = None
+    update_fields: dict[str, str] = {
+        "ai_summary_text": summary,
+        "target_audience": req.target_audience,
+    }
+    if req.review:
+        conditions = json.loads(record.get("conditions_json") or "[]")
+        review = ReviewVerdict(
+            **verify_summary(record["raw_clinical_text"], conditions, summary)
+        )
+        update_fields["review_json"] = review.model_dump_json()
+
+    update_communication(req.comm_id, **update_fields)
+
     return GenerateResponse(
         comm_id=req.comm_id,
         ai_summary_text=summary,
         target_audience=req.target_audience,
+        review=review,
     )
 
 

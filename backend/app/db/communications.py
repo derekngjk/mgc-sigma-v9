@@ -18,6 +18,7 @@ _UPDATABLE_FIELDS = {
     "approved_at",
     "target_audience",
     "approved_by_user_id",
+    "review_json",
 }
 
 

@@ -26,9 +26,11 @@ def get_provider(name: str | None = None) -> LLMProvider:
     return provider_cls()
 
 
-def complete(prompt: str, max_tokens: int = 1024) -> str:
-    """Run a completion against the configured provider."""
-    return get_provider().complete(prompt, max_tokens)
+def complete(prompt: str, max_tokens: int = 1024, provider: str | None = None) -> str:
+    """
+    Run a completion against `provider`, defaulting to the configured provider.
+    """
+    return get_provider(provider).complete(prompt, max_tokens)
 
 
 __all__ = [

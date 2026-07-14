@@ -32,12 +32,23 @@ class GenerateRequest(BaseModel):
     comm_id: str
     target_audience: str = "patient"
     length: str = "medium"
+    # Optional: use second LLM instance to review the generated summary
+    review: bool = False
+
+
+class ReviewVerdict(BaseModel):
+    verdict: str  # "ok" | "warnings" | "unavailable"
+    unsupported_claims: list[str]
+    omissions: list[str]
+    risky_simplifications: list[str]
+    note: str = ""
 
 
 class GenerateResponse(BaseModel):
     comm_id: str
     ai_summary_text: str
     target_audience: str
+    review: ReviewVerdict | None = None
 
 
 class ApproveRequest(BaseModel):

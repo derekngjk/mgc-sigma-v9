@@ -11,7 +11,7 @@ def normalize_record(record: dict[str, Any]) -> dict[str, Any]:
     patient = record.pop("patients", {})
     record["patient_name"] = patient.get("patient_name", "")
     record["epic_patient_id"] = patient.get("epic_patient_id", "")
-    for column in ("conditions_json", "condition_diff"):
+    for column in ("conditions_json", "condition_diff", "review_json"):
         if isinstance(record.get(column), (list, dict)):
             record[column] = json.dumps(record[column])
     return record

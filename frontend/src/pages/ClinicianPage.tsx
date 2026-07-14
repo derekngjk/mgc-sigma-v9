@@ -27,6 +27,14 @@ interface PatientData {
   condition_diff: ConditionDiff;
 }
 
+interface ReviewVerdict {
+  verdict: 'ok' | 'warnings' | 'unavailable';
+  unsupported_claims: string[];
+  omissions: string[];
+  risky_simplifications: string[];
+  note: string;
+}
+
 // ── constants ─────────────────────────────────────────────────────────────────
 
 // Live IDs are fetched from the Synapxe HealthX FHIR R4B endpoint and must be
@@ -104,6 +112,80 @@ function ErrorBanner({ message }: { message: string }) {
   return (
     <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
       {message}
+    </div>
+  );
+}
+
+const REVIEW_CATEGORIES: { key: keyof ReviewVerdict; label: string }[] = [
+  { key: 'unsupported_claims', label: 'Not supported by the record' },
+  { key: 'omissions', label: 'Potentially important omissions' },
+  { key: 'risky_simplifications', label: 'Risky simplifications' },
+];
+
+// A second LLM checking the draft against the source facts. Not meant to be a formal approval,
+// still needs to be verified by the human medical professional
+function ReviewPanel({ review }: { review: ReviewVerdict }) {
+  if (review.verdict === 'unavailable') {
+    return (
+      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+        <p className="text-sm font-medium text-slate-600">Automated check unavailable</p>
+        <p className="mt-0.5 text-xs text-slate-400">
+          {review.note || 'The reviewer could not be reached.'} Review the draft manually.
+        </p>
+      </div>
+    );
+  }
+
+  if (review.verdict === 'ok') {
+    return (
+      <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+        <p className="text-sm font-medium text-emerald-800">
+          Automated check raised no flags
+        </p>
+        <p className="mt-0.5 text-xs text-emerald-600">
+          Advisory only — this is not an approval. Please still read the draft in full.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5">
+      <p className="text-sm font-medium text-amber-900">
+        Automated check flagged {
+          REVIEW_CATEGORIES.reduce(
+            (n, c) => n + (review[c.key] as string[]).length,
+            0,
+          )
+        } item(s) for your attention
+      </p>
+      <p className="mt-0.5 text-xs text-amber-700">
+        Advisory only — flags may be wrong, and an absent flag is not a guarantee.
+      </p>
+      <div className="mt-2.5 space-y-2.5">
+        {REVIEW_CATEGORIES.map(({ key, label }) => {
+          const items = review[key] as string[];
+          if (items.length === 0) return null;
+          return (
+            <div key={key}>
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+                {label}
+              </p>
+              <ul className="mt-1 space-y-1">
+                {items.map((item) => (
+                  <li
+                    key={item}
+                    className="flex items-start gap-2 text-sm text-amber-900"
+                  >
+                    <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-500" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -191,12 +273,15 @@ interface AiDraftPanelProps {
   generateError: string | null;
   commId: string;
   generateImage: boolean;
+  enableReview: boolean;
+  review: ReviewVerdict | null;
   onAudienceChange: (v: string) => void;
   onLengthChange: (v: ReportLength) => void;
   onDraftChange: (v: string) => void;
   onGenerate: () => void;
   onApprove: () => void;
   onGenerateImageChange: (v: boolean) => void;
+  onEnableReviewChange: (v: boolean) => void;
 }
 
 function AiDraftPanel({
@@ -208,12 +293,15 @@ function AiDraftPanel({
   generateError,
   commId,
   generateImage,
+  enableReview,
+  review,
   onAudienceChange,
   onLengthChange,
   onDraftChange,
   onGenerate,
   onApprove,
   onGenerateImageChange,
+  onEnableReviewChange,
 }: AiDraftPanelProps) {
   const canGenerate = stage === 'ready' || stage === 'generated';
   const isGenerating = stage === 'generating';
@@ -287,6 +375,37 @@ function AiDraftPanel({
           </div>
         </div>
 
+        {/* Independent review toggle (optional), adds a second LLM call per generate */}
+        <div
+          className={`mb-3 flex items-center justify-between rounded-lg border px-3 py-2.5 transition-colors ${
+            enableReview ? 'border-indigo-200 bg-indigo-50' : 'border-slate-200 bg-slate-50'
+          } ${isGenerating ? 'opacity-50' : ''}`}
+        >
+          <div>
+            <p className="text-sm font-medium text-slate-700">Independent AI review</p>
+            <p className="text-xs text-slate-400">
+              A second model checks the draft against the record · adds a second LLM call
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enableReview}
+            aria-label="Independent AI review"
+            onClick={() => !isGenerating && onEnableReviewChange(!enableReview)}
+            disabled={isGenerating}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed ${
+              enableReview ? 'bg-indigo-500' : 'bg-slate-300'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                enableReview ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
         {generateError && <ErrorBanner message={generateError} />}
         {fetchError && <ErrorBanner message={fetchError} />}
 
@@ -305,6 +424,9 @@ function AiDraftPanel({
           className="mt-1 flex-1 resize-none rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800 placeholder-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:cursor-default disabled:opacity-60"
           rows={10}
         />
+
+        {/* Independent review flags */}
+        {review && <ReviewPanel review={review} />}
 
         {/* Comm ID display (for debugging / Task 4.2 wiring) */}
         {commId && (
@@ -375,6 +497,8 @@ export default function ClinicianPage({ session }: { session: Session }) {
   const [approveError, setApproveError] = useState<string | null>(null);
   const [approvedLink, setApprovedLink] = useState('');
   const [generateImage, setGenerateImage] = useState(false);
+  const [enableReview, setEnableReview] = useState(false);
+  const [review, setReview] = useState<ReviewVerdict | null>(null);
 
   async function handleFetch() {
     setStage('fetching');
@@ -383,6 +507,7 @@ export default function ClinicianPage({ session }: { session: Session }) {
     setCommId('');
     setFetchError(null);
     setGenerateError(null);
+    setReview(null);
 
     try {
       const res = await fetch(`${API_BASE}/api/patient/${selectedPatientId}`, {
@@ -406,19 +531,29 @@ export default function ClinicianPage({ session }: { session: Session }) {
     if (!commId) return;
     setStage('generating');
     setGenerateError(null);
+    setReview(null);
 
     try {
       const res = await fetch(`${API_BASE}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeader },
-        body: JSON.stringify({ comm_id: commId, target_audience: audience, length }),
+        body: JSON.stringify({
+          comm_id: commId,
+          target_audience: audience,
+          length,
+          review: enableReview,
+        }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { detail?: string };
         throw new Error(body.detail ?? `HTTP ${res.status}`);
       }
-      const data = (await res.json()) as { ai_summary_text: string };
+      const data = (await res.json()) as {
+        ai_summary_text: string;
+        review: ReviewVerdict | null;
+      };
       setDraftText(data.ai_summary_text);
+      setReview(data.review);
       setStage('generated');
     } catch (e) {
       setGenerateError(e instanceof Error ? e.message : 'Unknown error');
@@ -498,6 +633,7 @@ export default function ClinicianPage({ session }: { session: Session }) {
               setGenerateError(null);
               setApproveError(null);
               setApprovedLink('');
+              setReview(null);
             }}
             disabled={isFetching}
             className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -626,6 +762,7 @@ ${bodyHtml}
                   setFetchError(null);
                   setGenerateError(null);
                   setGenerateImage(false);
+                  setReview(null);
                 }}
                 className="text-sm text-emerald-700 underline hover:text-emerald-900"
               >
@@ -649,12 +786,15 @@ ${bodyHtml}
             generateError={generateError ?? approveError}
             commId={commId}
             generateImage={generateImage}
+            enableReview={enableReview}
+            review={review}
             onAudienceChange={setAudience}
             onLengthChange={setLength}
             onDraftChange={setDraftText}
             onGenerate={handleGenerate}
             onApprove={handleApprove}
             onGenerateImageChange={setGenerateImage}
+            onEnableReviewChange={setEnableReview}
           />
         </div>
       )}

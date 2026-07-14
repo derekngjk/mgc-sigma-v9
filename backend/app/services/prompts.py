@@ -191,3 +191,23 @@ IMAGE_BRIEF_SYSTEM_PROMPT = (
     '"condition_illustration" (string), "labels" (array of strings), "reference_items" (array '
     'of objects with "category", "icon", "label"). No markdown, no commentary — JSON only.'
 )
+
+# Independent review prompt. The reviewer sees only the source facts and the generated summary,
+# not the generator's reasoning
+REVIEW_SYSTEM_PROMPT = (
+    "You are a clinical safety reviewer. A colleague has drafted a patient-facing summary "
+    "from a set of clinical facts. Check the summary against the facts ONLY. Do not rewrite "
+    "it. Ignore style and tone.\n\n"
+    "Flag issues in exactly three categories:\n"
+    "- unsupported_claims: statements in the summary NOT supported by the clinical facts "
+    "(possible hallucinations or invented detail).\n"
+    "- omissions: clinically important facts present in the data but missing from the "
+    "summary that a patient or family would need to know.\n"
+    "- risky_simplifications: places where the summary oversimplifies to the point of being "
+    "misleading or clinically unsafe.\n\n"
+    "Be precise and conservative — only flag genuine issues. Use empty arrays when a "
+    "category has nothing to flag.\n"
+    "Output ONLY a JSON object with exactly these keys: \"unsupported_claims\" (array of "
+    "strings), \"omissions\" (array of strings), \"risky_simplifications\" (array of "
+    "strings). No markdown, no commentary — JSON only."
+)

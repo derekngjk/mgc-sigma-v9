@@ -50,6 +50,13 @@ class Settings:
         return os.getenv("LLM_PROVIDER", "anthropic")
 
     @property
+    def reviewer_provider(self) -> str:
+        """
+        Provider for the independent review pass.
+        """
+        return os.getenv("REVIEWER_PROVIDER", self.llm_provider)
+
+    @property
     def anthropic_api_key(self) -> str:
         return os.getenv("ANTHROPIC_API_KEY", "")
 
