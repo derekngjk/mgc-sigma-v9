@@ -45,11 +45,13 @@ from app.services.tts import generate_tts, split_sentences, strip_markdown
 router = APIRouter()
 
 
-def _validate_lang(lang: str) -> None:
+def validated_lang(lang: str = Query(default="en")) -> str:
+    """Validate the ?lang= query param, returning it (400 on an unsupported code)."""
     if lang not in VALID_LANGS:
         raise HTTPException(
             status_code=400, detail=f"lang must be one of: {sorted(VALID_LANGS)}"
         )
+    return lang
 
 
 def _condition_diff(record: dict[str, Any]) -> ConditionDiff:
@@ -67,6 +69,22 @@ def _load_user(user_id: str) -> dict[str, Any]:
     if user is None:
         raise HTTPException(status_code=401, detail="Account no longer exists")
     return user
+
+
+def authorized_report(
+    comm_id: str,
+    user_id: str = Depends(verify_portal_token),
+) -> dict[str, Any]:
+    """Resolve a path comm_id's report, gated to the caller's own patient + role.
+
+    Shared by the view and audio endpoints; 404 if the report isn't the caller's,
+    the wrong role, or not delivered.
+    """
+    user = _load_user(user_id)
+    record = get_role_report_for_user(comm_id, user["patient_id"], user["role"])
+    if record is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return record
 
 
 @router.post("/api/account/register", response_model=PatientLoginResponse)
@@ -135,14 +153,9 @@ def list_reports(
 def view_report(
     comm_id: str,
     user_id: str = Depends(verify_portal_token),
-    lang: str = Query(default="en"),
+    lang: str = Depends(validated_lang),
+    record: dict[str, Any] = Depends(authorized_report),
 ) -> ReportViewResponse:
-    _validate_lang(lang)
-    user = _load_user(user_id)
-    record = get_role_report_for_user(comm_id, user["patient_id"], user["role"])
-    if record is None:
-        raise HTTPException(status_code=404, detail="Report not found")
-
     mark_report_read(user_id, comm_id)  # idempotent per (user, report)
 
     return ReportViewResponse(
@@ -158,15 +171,9 @@ def view_report(
 @router.get("/api/account/reports/{comm_id}/audio", response_model=AudioResponse)
 def report_audio(
     comm_id: str,
-    user_id: str = Depends(verify_portal_token),
-    lang: str = Query(default="en"),
+    lang: str = Depends(validated_lang),
+    record: dict[str, Any] = Depends(authorized_report),
 ) -> AudioResponse:
-    _validate_lang(lang)
-    user = _load_user(user_id)
-    record = get_role_report_for_user(comm_id, user["patient_id"], user["role"])
-    if record is None:
-        raise HTTPException(status_code=404, detail="Report not found")
-
     summary_text = resolve_summary_text(comm_id, record["ai_summary_text"], lang)
     clean_text = strip_markdown(summary_text)
     sentences = split_sentences(clean_text)
