@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.routers import account
+from app.services import tts
 from app.services.llm import LLMConfigError
 from app.services.tts import split_sentences, strip_markdown
 
@@ -146,38 +147,44 @@ def test_audio_endpoint_report_not_found(
     assert resp.status_code == 404
 
 
-def test_audio_endpoint_cache_hit_skips_generation(
+def test_audio_endpoint_returns_url_and_sentences(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(account, "get_audio_url", lambda comm_id, lang: AUDIO_URL)
-    generate_called: list[bool] = []
     monkeypatch.setattr(
-        account, "generate_tts", lambda text: generate_called.append(True) or b""
+        account, "get_or_create_audio", lambda comm_id, lang, text: AUDIO_URL
     )
-
     resp = client.get("/api/account/reports/comm-001/audio?lang=en")
     assert resp.status_code == 200
     body = resp.json()
     assert body["url"] == AUDIO_URL
     assert isinstance(body["sentences"], list)
     assert len(body["sentences"]) > 0
-    assert not generate_called
 
 
-def test_audio_endpoint_cache_miss_generates_and_caches(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+# ── service: get_or_create_audio cache behavior ──────────────────────────────
+
+
+def test_get_or_create_audio_cache_hit_skips_generation(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(account, "get_audio_url", lambda comm_id, lang: None)
-    monkeypatch.setattr(account, "generate_tts", lambda text: FAKE_MP3)
-    monkeypatch.setattr(account, "upload_audio", lambda comm_id, lang, data: AUDIO_URL)
+    monkeypatch.setattr(tts, "get_audio_url", lambda comm_id, lang: AUDIO_URL)
+    generated: list[bool] = []
+    monkeypatch.setattr(tts, "generate_tts", lambda text: generated.append(True) or b"")
+
+    assert tts.get_or_create_audio("comm-001", "en", "hello") == AUDIO_URL
+    assert not generated
+
+
+def test_get_or_create_audio_generates_and_caches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tts, "get_audio_url", lambda comm_id, lang: None)
+    monkeypatch.setattr(tts, "generate_tts", lambda text: FAKE_MP3)
+    monkeypatch.setattr(tts, "upload_audio", lambda comm_id, lang, data: AUDIO_URL)
     set_calls: list[tuple] = []
     monkeypatch.setattr(
-        account, "set_audio_url", lambda c, lg, u: set_calls.append((c, lg, u))
+        tts, "set_audio_url", lambda c, lg, u: set_calls.append((c, lg, u))
     )
 
-    resp = client.get("/api/account/reports/comm-001/audio?lang=en")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["url"] == AUDIO_URL
-    assert isinstance(body["sentences"], list)
+    assert tts.get_or_create_audio("comm-001", "en", "hello") == AUDIO_URL
     assert set_calls == [("comm-001", "en", AUDIO_URL)]

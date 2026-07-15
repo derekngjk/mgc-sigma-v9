@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.db import (
     create_portal_user,
-    get_audio_url,
     get_patient_id_by_identity_hash,
     get_patient_name,
     get_portal_user,
@@ -16,8 +15,6 @@ from app.db import (
     get_role_report_for_user,
     list_role_reports,
     mark_report_read,
-    set_audio_url,
-    upload_audio,
 )
 from app.dependencies import verify_portal_token
 from app.schemas import (
@@ -40,7 +37,12 @@ from app.services.identity import (
 )
 from app.services.llm import LLMConfigError
 from app.services.summaries import resolve_summary_text
-from app.services.tts import generate_tts, split_sentences, strip_markdown
+from app.services.tts import (
+    TTSError,
+    get_or_create_audio,
+    split_sentences,
+    strip_markdown,
+)
 
 router = APIRouter()
 
@@ -178,25 +180,11 @@ def report_audio(
     clean_text = strip_markdown(summary_text)
     sentences = split_sentences(clean_text)
 
-    cached_url = get_audio_url(comm_id, lang)
-    if cached_url:
-        return AudioResponse(url=cached_url, sentences=sentences)
-
     try:
-        audio_bytes = generate_tts(clean_text)
+        url = get_or_create_audio(comm_id, lang, clean_text)
     except LLMConfigError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502, detail=f"TTS generation failed: {exc}"
-        ) from exc
+    except TTSError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    try:
-        url = upload_audio(comm_id, lang, audio_bytes)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=502, detail=f"Audio upload failed: {exc}"
-        ) from exc
-
-    set_audio_url(comm_id, lang, url)
     return AudioResponse(url=url, sentences=sentences)
