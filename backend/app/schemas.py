@@ -92,7 +92,7 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class PatientLoginResponse(BaseModel):
+class PortalSession(BaseModel):
     token: str
     patient_name: str
     role: str

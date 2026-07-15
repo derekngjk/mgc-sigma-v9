@@ -23,7 +23,7 @@ from app.schemas import (
     AudioResponse,
     ConditionDiff,
     LoginRequest,
-    PatientLoginResponse,
+    PortalSession,
     RegisterRequest,
     ReportCard,
     ReportListResponse,
@@ -99,8 +99,8 @@ def authorized_report(
     return record
 
 
-@router.post("/api/account/register", response_model=PatientLoginResponse)
-def register(req: RegisterRequest) -> PatientLoginResponse:
+@router.post("/api/account/register", response_model=PortalSession)
+def register(req: RegisterRequest) -> PortalSession:
     if req.role not in VALID_ROLES:
         raise HTTPException(
             status_code=400, detail=f"role must be one of: {sorted(VALID_ROLES)}"
@@ -124,21 +124,21 @@ def register(req: RegisterRequest) -> PatientLoginResponse:
 
     salt, pw_hash = hash_password(req.password)
     user_id = create_portal_user(email, pw_hash, salt, req.role, patient_id)
-    return PatientLoginResponse(
+    return PortalSession(
         token=issue_portal_token(user_id),
         patient_name=get_patient_name(patient_id),
         role=req.role,
     )
 
 
-@router.post("/api/account/login", response_model=PatientLoginResponse)
-def login(req: LoginRequest) -> PatientLoginResponse:
+@router.post("/api/account/login", response_model=PortalSession)
+def login(req: LoginRequest) -> PortalSession:
     user = get_portal_user_by_email(req.email)
     if user is None or not verify_password(
         req.password, user["password_salt"], user["password_hash"]
     ):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
-    return PatientLoginResponse(
+    return PortalSession(
         token=issue_portal_token(user["id"]),
         patient_name=get_patient_name(user["patient_id"]),
         role=user["role"],

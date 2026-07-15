@@ -74,11 +74,13 @@ class Settings:
 
     @property
     def patient_jwt_secret(self) -> str:
-        return os.getenv("PATIENT_JWT_SECRET", "dev-patient-jwt-secret-change-me")
+        # `or` (not getenv default) so an empty env value also falls back — never
+        # sign a session token with "".
+        return os.getenv("PATIENT_JWT_SECRET") or "dev-patient-jwt-secret-change-me"
 
     @property
     def patient_id_pepper(self) -> str:
-        return os.getenv("PATIENT_ID_PEPPER", "dev-patient-id-pepper-change-me")
+        return os.getenv("PATIENT_ID_PEPPER") or "dev-patient-id-pepper-change-me"
 
 
 settings = Settings()
