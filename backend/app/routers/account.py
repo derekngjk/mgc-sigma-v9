@@ -35,7 +35,7 @@ from app.services.identity import (
     issue_portal_token,
     verify_password,
 )
-from app.services.llm import LLMConfigError
+from app.services.llm import LLMConfigError, LLMError
 from app.services.summaries import resolve_summary_text
 from app.services.tts import (
     TTSError,
@@ -54,6 +54,16 @@ def validated_lang(lang: str = Query(default="en")) -> str:
             status_code=400, detail=f"lang must be one of: {sorted(VALID_LANGS)}"
         )
     return lang
+
+
+def _localized(comm_id: str, text: str, lang: str) -> str:
+    """resolve_summary_text with the LLM domain errors mapped to HTTP (503/502)."""
+    try:
+        return resolve_summary_text(comm_id, text, lang)
+    except LLMConfigError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 def _condition_diff(record: dict[str, Any]) -> ConditionDiff:
@@ -163,7 +173,7 @@ def view_report(
     return ReportViewResponse(
         id=comm_id,
         patient_name=record["patient_name"],
-        ai_summary_text=resolve_summary_text(comm_id, record["ai_summary_text"], lang),
+        ai_summary_text=_localized(comm_id, record["ai_summary_text"], lang),
         approved_at=record["approved_at"],
         condition_diff=_condition_diff(record),
         image_url=record.get("image_url"),
@@ -176,7 +186,7 @@ def report_audio(
     lang: str = Depends(validated_lang),
     record: dict[str, Any] = Depends(authorized_report),
 ) -> AudioResponse:
-    summary_text = resolve_summary_text(comm_id, record["ai_summary_text"], lang)
+    summary_text = _localized(comm_id, record["ai_summary_text"], lang)
     clean_text = strip_markdown(summary_text)
     sentences = split_sentences(clean_text)
 

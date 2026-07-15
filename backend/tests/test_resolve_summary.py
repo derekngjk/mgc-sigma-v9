@@ -1,7 +1,6 @@
 """Unit tests for the resolve_summary_text translation helper (services/summaries)."""
 
 import pytest
-from fastapi import HTTPException
 
 from app.services import summaries
 from app.services.llm import LLMConfigError, LLMError
@@ -32,25 +31,24 @@ def test_cache_miss_translates_and_stores(monkeypatch: pytest.MonkeyPatch) -> No
     assert stored == [("c1", "zh", "TRANSLATED")]
 
 
-def test_config_error_maps_to_503(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_config_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(summaries, "get_translation", lambda cid, lang: None)
 
     def boom(text: str, lang: str) -> str:
         raise LLMConfigError("no key")
 
     monkeypatch.setattr(summaries, "translate_summary", boom)
-    with pytest.raises(HTTPException) as exc:
+    # The service raises a domain error; the router (not this layer) maps it to HTTP.
+    with pytest.raises(LLMConfigError):
         summaries.resolve_summary_text("c1", "src", "zh")
-    assert exc.value.status_code == 503
 
 
-def test_llm_error_maps_to_502(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_llm_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(summaries, "get_translation", lambda cid, lang: None)
 
     def boom(text: str, lang: str) -> str:
         raise LLMError("upstream")
 
     monkeypatch.setattr(summaries, "translate_summary", boom)
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(LLMError):
         summaries.resolve_summary_text("c1", "src", "zh")
-    assert exc.value.status_code == 502

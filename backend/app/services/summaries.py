@@ -2,8 +2,6 @@
 
 from typing import Any
 
-from fastapi import HTTPException
-
 from app.db import get_translation, set_translation
 from app.services import llm
 from app.services.prompts import (
@@ -99,18 +97,13 @@ def resolve_summary_text(comm_id: str, source_text: str, lang: str) -> str:
     """Return the summary in the requested language, using and filling the cache.
 
     English short-circuits; non-English is translated once, cached, and reused.
-    Raises HTTPException(503/502) on LLM config / call failure, matching the routes.
+    Raises LLMConfigError / LLMError on failure — the router maps these to 503 / 502.
     """
     if lang == "en":
         return source_text
     cached = get_translation(comm_id, lang)
     if cached is not None:
         return cached
-    try:
-        translated = translate_summary(source_text, lang)
-    except llm.LLMConfigError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except llm.LLMError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    translated = translate_summary(source_text, lang)
     set_translation(comm_id, lang, translated)
     return translated
