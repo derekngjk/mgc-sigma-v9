@@ -1,9 +1,14 @@
-"""Patient-account identity: name+NRIC login hashing and session tokens.
+"""Portal identity primitives: patient-link hashing, password KDF, and session tokens.
 
-The login credential (patient full name + NRIC) is never stored — only an
-HMAC-SHA256 hash (peppered with a server secret) is kept on ``patients.identity_hash``
-and compared at login. A successful login mints a short-lived JWT that authorizes
-the patient-facing account endpoints.
+Three separate concerns for the patient/family portal:
+- ``identity_hash(name, nric)`` is the **registration link key** — a peppered HMAC of
+  the patient's full name + NRIC kept on ``patients.identity_hash``. A registering
+  user supplies these to link their new account to an existing patient; the raw
+  credential is never stored.
+- ``hash_password`` / ``verify_password`` protect the portal user's own login
+  password (PBKDF2-HMAC-SHA256, per-user salt).
+- ``issue_portal_token`` / ``decode_portal_token`` mint and validate the portal
+  session JWT, whose ``sub`` is the ``portal_users.id``.
 """
 
 import hashlib
@@ -17,7 +22,7 @@ from app.config import settings
 
 _TOKEN_ALG = "HS256"
 _TOKEN_TTL = timedelta(days=7)
-_TOKEN_TYPE = "patient"
+_TOKEN_TYPE = "portal"
 
 # PBKDF2-HMAC-SHA256 password hashing (stdlib — no external dependency).
 _PBKDF2_ITERATIONS = 240_000
@@ -71,11 +76,11 @@ def verify_password(password: str, salt_hex: str, hash_hex: str) -> bool:
     return hmac.compare_digest(derived.hex(), hash_hex)
 
 
-def issue_patient_token(patient_id: str) -> str:
-    """Mint a signed patient session JWT for the given internal patient id."""
+def issue_portal_token(portal_user_id: str) -> str:
+    """Mint a signed portal session JWT for the given portal_users.id."""
     now = datetime.now(UTC)
     payload = {
-        "sub": patient_id,
+        "sub": portal_user_id,
         "typ": _TOKEN_TYPE,
         "iat": int(now.timestamp()),
         "exp": int((now + _TOKEN_TTL).timestamp()),
@@ -83,15 +88,15 @@ def issue_patient_token(patient_id: str) -> str:
     return jwt.encode(payload, settings.patient_jwt_secret, algorithm=_TOKEN_ALG)
 
 
-def decode_patient_token(token: str) -> str:
-    """Return the patient id from a valid patient token.
+def decode_portal_token(token: str) -> str:
+    """Return the portal_users.id from a valid portal token.
 
     Raises jwt.InvalidTokenError (incl. expiry / wrong type / bad signature).
     """
     payload = jwt.decode(token, settings.patient_jwt_secret, algorithms=[_TOKEN_ALG])
     if payload.get("typ") != _TOKEN_TYPE:
-        raise jwt.InvalidTokenError("not a patient token")
-    patient_id = payload.get("sub")
-    if not patient_id:
+        raise jwt.InvalidTokenError("not a portal token")
+    portal_user_id = payload.get("sub")
+    if not portal_user_id:
         raise jwt.InvalidTokenError("missing subject")
-    return patient_id
+    return portal_user_id

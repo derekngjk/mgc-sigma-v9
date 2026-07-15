@@ -19,7 +19,7 @@ from app.db import (
     set_audio_url,
     upload_audio,
 )
-from app.dependencies import verify_patient_token
+from app.dependencies import verify_portal_token
 from app.schemas import (
     VALID_LANGS,
     VALID_ROLES,
@@ -35,7 +35,7 @@ from app.schemas import (
 from app.services.identity import (
     hash_password,
     identity_hash,
-    issue_patient_token,
+    issue_portal_token,
     verify_password,
 )
 from app.services.llm import LLMConfigError
@@ -95,7 +95,7 @@ def register(req: RegisterRequest) -> PatientLoginResponse:
     salt, pw_hash = hash_password(req.password)
     user_id = create_portal_user(email, pw_hash, salt, req.role, patient_id)
     return PatientLoginResponse(
-        token=issue_patient_token(user_id),
+        token=issue_portal_token(user_id),
         patient_name=get_patient_name(patient_id),
         role=req.role,
     )
@@ -109,7 +109,7 @@ def login(req: LoginRequest) -> PatientLoginResponse:
     ):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     return PatientLoginResponse(
-        token=issue_patient_token(user["id"]),
+        token=issue_portal_token(user["id"]),
         patient_name=get_patient_name(user["patient_id"]),
         role=user["role"],
     )
@@ -117,7 +117,7 @@ def login(req: LoginRequest) -> PatientLoginResponse:
 
 @router.get("/api/account/reports", response_model=ReportListResponse)
 def list_reports(
-    user_id: str = Depends(verify_patient_token),
+    user_id: str = Depends(verify_portal_token),
 ) -> ReportListResponse:
     user = _load_user(user_id)
     cards = list_role_reports(user["patient_id"], user["role"])
@@ -134,7 +134,7 @@ def list_reports(
 @router.get("/api/account/reports/{comm_id}", response_model=ReportViewResponse)
 def view_report(
     comm_id: str,
-    user_id: str = Depends(verify_patient_token),
+    user_id: str = Depends(verify_portal_token),
     lang: str = Query(default="en"),
 ) -> ReportViewResponse:
     _validate_lang(lang)
@@ -158,7 +158,7 @@ def view_report(
 @router.get("/api/account/reports/{comm_id}/audio", response_model=AudioResponse)
 def report_audio(
     comm_id: str,
-    user_id: str = Depends(verify_patient_token),
+    user_id: str = Depends(verify_portal_token),
     lang: str = Query(default="en"),
 ) -> AudioResponse:
     _validate_lang(lang)

@@ -7,10 +7,10 @@ import pytest
 
 from app.config import settings
 from app.services.identity import (
-    decode_patient_token,
+    decode_portal_token,
     hash_password,
     identity_hash,
-    issue_patient_token,
+    issue_portal_token,
     verify_password,
 )
 
@@ -52,8 +52,8 @@ def test_verify_password_tolerates_malformed_salt() -> None:
 
 
 def test_token_round_trip() -> None:
-    token = issue_patient_token("patient-uuid-1")
-    assert decode_patient_token(token) == "patient-uuid-1"
+    token = issue_portal_token("portal-user-1")
+    assert decode_portal_token(token) == "portal-user-1"
 
 
 def test_decode_rejects_bad_signature() -> None:
@@ -61,7 +61,7 @@ def test_decode_rejects_bad_signature() -> None:
         {"sub": "x", "typ": "patient"}, "a" * 40, algorithm="HS256"
     )
     with pytest.raises(jwt.InvalidTokenError):
-        decode_patient_token(forged)
+        decode_portal_token(forged)
 
 
 def test_decode_rejects_wrong_token_type() -> None:
@@ -71,7 +71,7 @@ def test_decode_rejects_wrong_token_type() -> None:
         algorithm="HS256",
     )
     with pytest.raises(jwt.InvalidTokenError):
-        decode_patient_token(other)
+        decode_portal_token(other)
 
 
 def test_decode_rejects_expired_token() -> None:
@@ -82,4 +82,4 @@ def test_decode_rejects_expired_token() -> None:
         algorithm="HS256",
     )
     with pytest.raises(jwt.ExpiredSignatureError):
-        decode_patient_token(expired)
+        decode_portal_token(expired)

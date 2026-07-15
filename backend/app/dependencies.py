@@ -8,7 +8,7 @@ from fastapi import HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
-from app.services.identity import decode_patient_token
+from app.services.identity import decode_portal_token
 
 _bearer = HTTPBearer()
 
@@ -42,12 +42,12 @@ def verify_clinician_token(
     return response.json()
 
 
-def verify_patient_token(
+def verify_portal_token(
     credentials: HTTPAuthorizationCredentials = Security(_bearer),
 ) -> str:
-    """Validate the patient session JWT and return the internal patient id."""
+    """Validate the portal session JWT and return the portal_users.id."""
     try:
-        return decode_patient_token(credentials.credentials)
+        return decode_portal_token(credentials.credentials)
     except jwt.InvalidTokenError as exc:
         raise HTTPException(
             status_code=401, detail="Invalid or expired session"

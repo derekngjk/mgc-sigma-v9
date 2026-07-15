@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.dependencies import verify_clinician_token, verify_patient_token
+from app.dependencies import verify_clinician_token, verify_portal_token
 from app.main import app
 
 
@@ -21,7 +21,7 @@ def override_auth():
         "id": "test-user-id",
         "sub": "test-user",
     }
-    app.dependency_overrides[verify_patient_token] = lambda: "test-portal-user-id"
+    app.dependency_overrides[verify_portal_token] = lambda: "test-portal-user-id"
     yield
     app.dependency_overrides.clear()
 

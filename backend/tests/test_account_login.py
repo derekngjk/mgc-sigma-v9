@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.routers import account
-from app.services.identity import decode_patient_token, hash_password
+from app.services.identity import decode_portal_token, hash_password
 
 
 @pytest.fixture
@@ -39,7 +39,7 @@ def test_register_success_returns_token(
     body = resp.json()
     assert body["role"] == "caregiver"
     assert body["patient_name"] == "Tan Mei Ling"
-    assert decode_patient_token(body["token"]) == "user-1"
+    assert decode_portal_token(body["token"]) == "user-1"
 
 
 def test_register_unknown_patient_returns_404(
@@ -133,7 +133,7 @@ def test_login_success_returns_token(
     assert resp.status_code == 200
     body = resp.json()
     assert body["role"] == "caregiver"
-    assert decode_patient_token(body["token"]) == "user-1"
+    assert decode_portal_token(body["token"]) == "user-1"
 
 
 def test_login_wrong_password_returns_401(
