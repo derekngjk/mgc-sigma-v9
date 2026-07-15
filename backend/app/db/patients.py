@@ -1,6 +1,4 @@
-"""Patient lookup + report delivery helpers shared by the clinician and portal flows."""
-
-from datetime import UTC, datetime
+"""Patient-table lookups: identity link, delivery eligibility, display name."""
 
 from app.db import client
 
@@ -50,14 +48,3 @@ def get_patient_name(patient_id: str) -> str:
     if not res.data:
         return ""
     return res.data[0].get("patient_name", "")
-
-
-def set_delivered(comm_id: str) -> None:
-    """Mark a report as delivered (set on approval); portal users then see it by role."""
-    supabase = client.get_supabase()
-    (
-        supabase.table("care_plan_translations")
-        .update({"delivered_to_patient_at": datetime.now(UTC).isoformat()})
-        .eq("id", comm_id)
-        .execute()
-    )

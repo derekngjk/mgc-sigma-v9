@@ -111,6 +111,17 @@ def update_communication(comm_id: str, **kwargs: str) -> bool:
     return len(res.data) > 0
 
 
+def set_delivered(comm_id: str) -> None:
+    """Mark a report as delivered (set on approval); portal users then see it by role."""
+    supabase = client.get_supabase()
+    (
+        supabase.table("care_plan_translations")
+        .update({"delivered_to_patient_at": datetime.now(UTC).isoformat()})
+        .eq("id", comm_id)
+        .execute()
+    )
+
+
 def get_translation(comm_id: str, lang: str) -> str | None:
     return get_json_column(comm_id, "translations_json", lang)
 

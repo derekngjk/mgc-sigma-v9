@@ -1,19 +1,19 @@
 """Database access layer: Supabase CRUD, storage, and schema init."""
 
-from app.db.accounts import (
-    get_patient_id_by_identity_hash,
-    get_patient_name,
-    patient_has_identity,
-    set_delivered,
-)
 from app.db.client import get_supabase
 from app.db.communications import (
     create_communication,
     get_communication,
     get_latest_approved_communication,
     get_translation,
+    set_delivered,
     set_translation,
     update_communication,
+)
+from app.db.patients import (
+    get_patient_id_by_identity_hash,
+    get_patient_name,
+    patient_has_identity,
 )
 from app.db.portal import (
     create_portal_user,
