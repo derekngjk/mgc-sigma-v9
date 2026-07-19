@@ -207,7 +207,7 @@ REVIEW_SYSTEM_PROMPT = (
     "misleading or clinically unsafe.\n\n"
     "Be precise and conservative — only flag genuine issues. Use empty arrays when a "
     "category has nothing to flag.\n"
-    "Output ONLY a JSON object with exactly these keys: \"unsupported_claims\" (array of "
-    "strings), \"omissions\" (array of strings), \"risky_simplifications\" (array of "
+    'Output ONLY a JSON object with exactly these keys: "unsupported_claims" (array of '
+    'strings), "omissions" (array of strings), "risky_simplifications" (array of '
     "strings). No markdown, no commentary — JSON only."
 )

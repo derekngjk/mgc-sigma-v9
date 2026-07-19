@@ -73,3 +73,41 @@ def test_first_fetch_all_conditions_are_ongoing(
     assert resp.status_code == 200
     diff = resp.json()["condition_diff"]
     assert "C1" in diff["ongoing"]
+
+
+def test_diff_against_prior_approved_record(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, mock_supabase
+) -> None:
+    """A prior Approved snapshot of [C1, C2] vs. a fetch of [C2, C3] is the real
+    change-detection path: C3 is new, C1 resolved, C2 ongoing."""
+    from app.routers import clinician
+
+    monkeypatch.setattr(
+        clinician, "fetch_patient_data", lambda _: _make_mock_fhir(["C2", "C3"])
+    )
+
+    mock_supabase.table("patients").execute.side_effect = [
+        MagicMock(data=[{"id": "p1"}]),  # get_latest -> patient found
+        MagicMock(data=[{"id": "p1"}]),  # create_communication (upsert)
+    ]
+    mock_supabase.table("care_plan_translations").execute.side_effect = [
+        MagicMock(  # the prior Approved record
+            data=[
+                {
+                    "id": "comm-prev",
+                    "status": "Approved",
+                    "conditions_json": json.dumps(["C1", "C2"]),
+                    "patients": {"patient_name": "Elena", "epic_patient_id": "epi"},
+                }
+            ]
+        ),
+        MagicMock(data=[{"id": "c2"}]),  # create_communication insert
+    ]
+
+    resp = client.get("/api/patient/test-patient-001")
+
+    assert resp.status_code == 200
+    diff = resp.json()["condition_diff"]
+    assert diff["added"] == ["C3"]
+    assert diff["removed"] == ["C1"]
+    assert diff["ongoing"] == ["C2"]

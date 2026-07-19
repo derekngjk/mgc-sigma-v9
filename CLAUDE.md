@@ -76,7 +76,7 @@ mgc-sigma-v9/
 | --- | --- | --- |
 | `GET /health` | ✅ Live | Liveness check |
 | `GET /api/patient/{id}` | ✅ Live | Fetch + parse FHIR data (Patient, Condition, CarePlan); falls back to mock JSON for `mock-oncology-123`; creates a Draft `Communications` record; computes three-way condition diff (added/removed/ongoing) vs. last approved record; returns `PatientResponse` with `condition_diff` |
-| `POST /api/generate` | ✅ Live | Accepts `comm_id` + `target_audience`; calls LLM (`LLM_PROVIDER` env var selects Anthropic or OpenAI); stores summary in `Communications`; returns `GenerateResponse` |
+| `POST /api/generate` | ✅ Live | Accepts `comm_id` + `target_audience` + optional `review`; calls LLM (`LLM_PROVIDER` env var selects Anthropic or OpenAI); when `review: true`, a second LLM (`REVIEWER_PROVIDER`) checks the draft against the source facts and the advisory `ReviewVerdict` is returned and persisted to `review_json`; stores summary in `Communications`; returns `GenerateResponse` |
 | `POST /api/communications/{id}/approve` | ✅ Live | Saves edited `ai_summary_text`, flips status to `Approved`, auto-delivers to the patient's account (`set_delivered`); returns `id` + `approved_at` + `patient_name` + `delivered` (`false` when the patient has no NRIC → no account) |
 | `POST /api/account/register` | ✅ Live | Portal registration — body `{email, password, role, patient_full_name, patient_nric}`; links via `identity_hash`; creates a `portal_users` row (PBKDF2-hashed password); returns a session JWT + `patient_name` + `role`. 404 unknown patient · 409 duplicate email · 400 bad role/short password |
 | `POST /api/account/login` | ✅ Live | Portal login — body `{email, password}`; verifies against `portal_users`; returns JWT + `patient_name` + `role`, or 401 |
