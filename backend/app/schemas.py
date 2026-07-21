@@ -112,3 +112,44 @@ class ReportListResponse(BaseModel):
     role: str
     unread: int
     reports: list[ReportCard]
+
+
+# automated change detection
+
+
+class DetectedDraft(BaseModel):
+    comm_id: str
+    target_audience: str
+    generated: bool  # False if the summary auto-generation failed (draft still created)
+
+
+class DetectedChange(BaseModel):
+    patient_name: str
+    epic_patient_id: str
+    added: list[str]
+    removed: list[str]
+    drafts: list[DetectedDraft]
+
+
+class ScanResult(BaseModel):
+    patients_scanned: int
+    patients_changed: int
+    drafts_created: int
+    changes: list[DetectedChange]
+    errors: list[str]
+
+
+class ChangeInboxItem(BaseModel):
+    comm_id: str
+    patient_name: str
+    epic_patient_id: str
+    target_audience: str
+    conditions: list[str]
+    condition_diff: ConditionDiff
+    ai_summary_text: str
+    fhir_source: str
+    detected_at: str | None = None
+
+
+class ChangeInboxResponse(BaseModel):
+    items: list[ChangeInboxItem]

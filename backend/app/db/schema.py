@@ -79,6 +79,13 @@ def init_db(db_url: str) -> None:
                 ALTER TABLE care_plan_translations
                 ADD COLUMN IF NOT EXISTS viewed_by_patient_at TIMESTAMPTZ
             """)
+            # Marks a Draft that was auto-created by change detection (a re-fetch from
+            # Epic showed the conditions changed vs. the last approved report). The
+            # clinician inbox lists Drafts where this is set; NULL = clinician-initiated.
+            cur.execute("""
+                ALTER TABLE care_plan_translations
+                ADD COLUMN IF NOT EXISTS detected_at TIMESTAMPTZ
+            """)
 
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS families (

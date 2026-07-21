@@ -39,7 +39,7 @@ mgc-sigma-v9/
 │   ├── pyproject.toml          Deps ([project] + [dependency-groups] dev), pytest + ruff config — uv-managed
 │   ├── uv.lock                 Pinned dependency lockfile (single source of truth)
 │   ├── .python-version         Pins the Python version (read by uv; Render fallback)
-│   ├── .env.example            SUPABASE_URL · SUPABASE_KEY · SUPABASE_DB_URL · FHIR_BASE_URL · LLM_PROVIDER · PATIENT_JWT_SECRET · PATIENT_ID_PEPPER
+│   ├── .env.example            SUPABASE_URL · SUPABASE_KEY · SUPABASE_DB_URL · FHIR_BASE_URL · LLM_PROVIDER · PATIENT_JWT_SECRET · PATIENT_ID_PEPPER · SCAN_TOKEN
 │   └── tests/                  pytest suite (imports the app via `app.*`; patches router/service module globals)
 │
 ├── frontend/                   React 18 + Vite + TypeScript + Tailwind CSS
@@ -83,6 +83,8 @@ mgc-sigma-v9/
 | `GET /api/account/reports` | ✅ Live | (portal JWT) The user's **role-scoped** delivered reports as cards + **per-user** unread count (from `portal_report_reads`) + `role` |
 | `GET /api/account/reports/{comm_id}` | ✅ Live | (portal JWT) One report matching the caller's patient **and role**; `?lang=` translates; marks read for this user; 404 otherwise |
 | `GET /api/account/reports/{comm_id}/audio` | ✅ Live | (portal JWT) TTS MP3 + sentences for a role-authorized report; `?lang=` selects language |
+| `POST /api/changes/scan` | ✅ Live | (scan token) Re-fetch every watched patient (≥1 approved report) from Epic, diff active conditions vs. the last approved snapshot, and auto-create a Draft + auto-generate the updated summary for each detected change (one per delivered audience). Auth via `X-Scan-Token` header == `SCAN_TOKEN`; 503 when unset. Called by an external scheduler (cron). Returns a `ScanResult` |
+| `GET /api/changes` | ✅ Live | (clinician) Inbox of un-approved, change-detected Drafts (those with `detected_at` set) — patient, condition diff, and the pre-generated summary, for review-and-approve |
 
 ### Supabase schema (PostgreSQL)
 
@@ -114,6 +116,8 @@ mgc-sigma-v9/
 - `approved_by_user_id` (UUID): Clinician (Supabase Auth) who approved — audit trail
 - `delivered_to_patient_at` (TIMESTAMPTZ): Set on approval; a report appears in the portal only once delivered
 - `viewed_by_patient_at` (TIMESTAMPTZ): **Deprecated** — read state is now per-user in `portal_report_reads`
+- `review_json` (JSONB): Advisory second-LLM review verdict (when `POST /api/generate` is called with `review: true`)
+- `detected_at` (TIMESTAMPTZ): Set when a Draft was auto-created by change detection; the clinician inbox lists Drafts where this is non-NULL
 
 #### `portal_users` table
 

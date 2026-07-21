@@ -1,5 +1,12 @@
 """Database access layer: Supabase CRUD, storage, and schema init."""
 
+from app.db.changes import (
+    delivered_audiences,
+    has_open_detected_draft,
+    insert_detected_draft,
+    list_detected_drafts,
+    list_watched_patients,
+)
 from app.db.client import get_supabase
 from app.db.communications import (
     create_communication,
@@ -37,6 +44,7 @@ from app.db.storage import (
 __all__ = [
     "create_communication",
     "create_portal_user",
+    "delivered_audiences",
     "get_audio_url",
     "get_communication",
     "get_image_url",
@@ -49,8 +57,12 @@ __all__ = [
     "get_role_report_for_user",
     "get_supabase",
     "get_translation",
+    "has_open_detected_draft",
     "init_db",
+    "insert_detected_draft",
+    "list_detected_drafts",
     "list_role_reports",
+    "list_watched_patients",
     "mark_report_read",
     "patient_has_identity",
     "set_audio_url",

@@ -1069,3 +1069,69 @@ unchanged.
   read that role's reports (no clinician-issued invite code).
 - **One patient per account:** a caregiver for two patients needs two email accounts.
 - No email verification; the PBKDF2 iteration count is fixed in code.
+
+---
+
+## Automated Epic change detection
+
+ Poll the live FHIR server for changes. Using a dummy patient, use an API to write an updated condition, as if a clinician adds a new condition.
+
+### The pipeline
+
+```
+scripts/update_condition.py   →  PUT Condition to HealthX (a clinician "edits Epic")
+        ↓  (later, on a schedule)
+POST /api/changes/scan        →  for each watched patient: re-fetch → diff → auto-draft + auto-generate
+        ↓
+GET /api/changes              →  clinician inbox of detected drafts
+        ↓
+existing approve flow         →  clinician reviews, approves → delivered to the portal
+```
+
+### `services/change_detection.py`
+
+For each **watched patient** (`db/changes.list_watched_patients` — anyone with ≥1 Approved report; before that there's no baseline and no recipient):
+
+1. `fetch_patient_data(epic_id)` — live FHIR read.
+2. Diff active conditions vs. `latest_approved_for_patient`'s snapshot. Equal → skip.
+3. For each audience already delivered to (`delivered_audiences`, e.g. `patient`, `spouse`): create a Draft flagged `detected_at` (`insert_detected_draft`) and auto-generate its summary. A patient who received both a `patient` and a `spouse` report gets an updated draft for each.
+
+Edge cases:
+
+- **Dedup** (`has_open_detected_draft`): a scan runs every N minutes; without this each run would create fresh drafts. It matches on patient + audience + the exact active-condition set, so a still-pending draft for the same change is left alone.
+- **Generation is best-effort**: if the LLM is down, the Draft is still created (with `generated: false`) so the change is visible; the clinician can click Generate. A broken LLM never hides a detected change.
+
+### Trigger: `POST /api/changes/scan` + external scheduler
+
+The endpoint does the work; an outside scheduler calls it on a timetable, i.e. the external job calls the API to get it to scan for changes every N minutes.
+
+### `scripts/update_condition.py`
+
+An ops tool, deliberately outside the app (the app only ever *reads* FHIR). It mirrors `seed_healthx.py`'s API-key PUTs:
+- `--add "<display>" [--code <snomed>]` → PUT a new active Condition → detection reports `added`.
+- `--resolve "<display>"` → flip an existing Condition to `resolved`; it drops out of the `clinical-status=active` search → detection reports `removed`.
+- `--list` → show current conditions.
+
+Only live (`hx-*` / UUID) patients are writable; `mock-*` ids are served from local files and can't be changed this way, so the demo uses a live patient.
+
+### Clinician UI
+
+`GET /api/changes` (clinician-auth) lists detected Drafts. `components/ChangesInbox.tsx` renders them on the clinician page's idle screen, showing the patient, the added/removed condition chips, and a "Review & approve" button. Opening one calls `loadDetectedDraft`, which synthesizes the patient panel from the inbox item and jumps straight to the `generated` stage, so the pre-written summary lands in the normal editable draft + Approve flow (or `ready`, if generation had failed, so the clinician can Generate).
+
+### Demo script
+
+```bash
+# 0. one-time: an approved report must exist for the patient (establishes the baseline
+#    and makes them "watched"). Do the normal fetch → generate → approve for hx-oncology-001.
+
+# 1. a "clinician" changes Epic
+cd backend && uv run python -m scripts.update_condition \
+    --patient hx-oncology-001 --add "Febrile neutropenia" --code 409089005
+
+# 2. the scheduler fires (here, by hand)
+curl -X POST https://<backend>/api/changes/scan -H "X-Scan-Token: $SCAN_TOKEN"
+#    → {"patients_changed": 1, "drafts_created": 1, ...}
+
+# 3. clinician page → "Updates detected from Epic" inbox shows the draft, summary
+#    already written and mentioning the new condition → Review & approve → delivered.
+```

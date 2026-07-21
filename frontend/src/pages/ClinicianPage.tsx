@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { ChangesInbox } from '../components/ChangesInbox';
+import type { ChangeInboxItem } from '../components/ChangesInbox';
 import { markdownToHtml, openPrintWindow, PRINT_FONT } from '../lib/markdown';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
@@ -582,6 +584,33 @@ export default function ClinicianPage({ session }: { session: Session }) {
     }
   }
 
+  // Load a change-detected draft (summary already generated) straight into the review
+  // flow: synthesize the patient panel from the inbox item and jump to the 'generated'
+  // stage so the clinician can edit and Approve, exactly as for a manual draft.
+  function loadDetectedDraft(item: ChangeInboxItem) {
+    setPatient({
+      epic_patient_id: item.epic_patient_id,
+      patient_name: item.patient_name,
+      dob: '',
+      gender: '',
+      conditions: item.conditions,
+      comm_id: item.comm_id,
+      fhir_source: item.fhir_source,
+      condition_diff: item.condition_diff,
+    });
+    setSelectedPatientId(item.epic_patient_id);
+    setCommId(item.comm_id);
+    setAudience(item.target_audience);
+    setDraftText(item.ai_summary_text);
+    setReview(null);
+    setFetchError(null);
+    setGenerateError(null);
+    setApproveError(null);
+    // An auto-generated draft lands ready to approve; an ungenerated one (LLM was down)
+    // lands at 'ready' so the clinician can click Generate.
+    setStage(item.ai_summary_text ? 'generated' : 'ready');
+  }
+
   const isFetching = stage === 'fetching';
 
   return (
@@ -670,8 +699,16 @@ export default function ClinicianPage({ session }: { session: Session }) {
 
       {/* Main content */}
       {stage === 'idle' && !patient && (
-        <div className="mx-auto max-w-6xl px-6 py-20 text-center text-slate-400">
-          Select a patient and click <strong>Fetch Patient Data</strong> to begin.
+        <div className="mx-auto max-w-6xl px-6 py-10">
+          <ChangesInbox
+            apiBase={API_BASE}
+            authHeader={authHeader}
+            onOpen={loadDetectedDraft}
+          />
+          <p className="mt-6 text-center text-sm text-slate-400">
+            …or select a patient above and click <strong>Fetch Patient Data</strong> to
+            start a report manually.
+          </p>
         </div>
       )}
 

@@ -82,5 +82,15 @@ class Settings:
     def patient_id_pepper(self) -> str:
         return os.getenv("PATIENT_ID_PEPPER") or "dev-patient-id-pepper-change-me"
 
+    @property
+    def scan_token(self) -> str:
+        """
+        Shared secret an external scheduler sends to trigger change detection.
+
+        If empty, the /api/changes/scan endpoint is disabled (503). Set a
+        value in the deployed environment and give it to the cron caller.
+        """
+        return os.getenv("SCAN_TOKEN", "")
+
 
 settings = Settings()
